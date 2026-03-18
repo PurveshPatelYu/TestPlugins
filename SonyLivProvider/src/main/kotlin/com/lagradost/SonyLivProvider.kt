@@ -208,10 +208,10 @@ class SonyLivProvider : MainAPI() {
     // ── Main page ─────────────────────────────────────────────────────────────
 
     override val mainPage = mainPageOf(
-        "7738"  to "TV Shows",
-        "7745"  to "Movies",
-        "7750"  to "Sports",
-        "35223" to "Premium",
+        "31155_24783"  to "Latest Episode",
+        "38048_8417"  to "Sony SAB TV Shows",
+        "38048_7123"  to "SET Shows",
+        "38048_7131" to "SET Classics",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
