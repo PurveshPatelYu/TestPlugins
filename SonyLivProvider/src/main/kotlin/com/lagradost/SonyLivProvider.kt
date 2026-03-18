@@ -6,28 +6,6 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.fasterxml.jackson.annotation.JsonProperty
 import java.util.UUID
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Safely decompress gzip if the response body starts with the gzip magic bytes,
- * otherwise return the raw text. This guards against servers that ignore the
- * absence of Accept-Encoding and send gzip anyway.
- */
-private fun NiceResponse.safeText(): String {
-    return try {
-        val bytes = this.okhttpResponse.body?.bytes() ?: return ""
-        if (bytes.size >= 2 && bytes[0] == 0x1F.toByte() && bytes[1] == 0x8B.toByte()) {
-            // gzip magic header detected — decompress manually
-            val gis = java.util.zip.GZIPInputStream(bytes.inputStream())
-            gis.bufferedReader(Charsets.UTF_8).use { it.readText() }
-        } else {
-            String(bytes, Charsets.UTF_8)
-        }
-    } catch (e: Exception) {
-        this.text  // fallback to OkHttp's own decoding
-    }
-}
-
 // ─── Data classes mirroring the SonyLiv API JSON ────────────────────────────
 
 data class SonyMetadata(
@@ -176,14 +154,14 @@ class SonyLivProvider : MainAPI() {
     private suspend fun getToken(): String {
         val url = "$apiBase/AGL/1.4/A/ENG/WEB/ALL/GETTOKEN"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyTokenResponse>(resp.safeText())
+        val data = parseJson<SonyTokenResponse>(resp.text)
         return data.resultObj ?: ""
     }
 
     private suspend fun getULD(): Pair<String, String> {
         val url = "$apiBase/AGL/1.4/A/ENG/WEB/ALL/USER/ULD"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyULDResponse>(resp.safeText())
+        val data = parseJson<SonyULDResponse>(resp.text)
         val stCode = data.resultObj?.stateCode ?: "IN"
         val cpID   = data.resultObj?.channelPartnerID ?: "MSMIND"
         return Pair(stCode, cpID)
@@ -209,7 +187,7 @@ class SonyLivProvider : MainAPI() {
         val url = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/PAGE/$topId" +
                 "?kids_safe=true&from=02&to=$pages"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
         val results = mutableListOf<SearchResponse>()
 
         data.resultObj?.containers?.forEach { container ->
@@ -240,7 +218,7 @@ class SonyLivProvider : MainAPI() {
         val url = "$apiBase/AGL/2.4/A/ENG/WEB/IN/$stateCode/TRAY/SEARCH" +
                 "?query=$encoded&from=0&to=9&kids_safe=true"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
 
         val results = mutableListOf<SearchResponse>()
         val containers = data.resultObj?.containers ?: return results
@@ -308,7 +286,7 @@ class SonyLivProvider : MainAPI() {
     private suspend fun loadShowContainer(cid: String): LoadResponse? {
         val url = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/PAGE/$cid?kids_safe=false"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
         val first = data.resultObj?.containers?.firstOrNull() ?: return null
 
         val showUri   = first.retrieveItems?.uri ?: return null
@@ -323,7 +301,7 @@ class SonyLivProvider : MainAPI() {
         val to   = minOf(from + 9, total)
         val url  = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/$mainUri&kids_safe=false&from=$from&to=$to"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
 
         val episodes = mutableListOf<Episode>()
         var title    = "SonyLIV"
@@ -375,7 +353,7 @@ class SonyLivProvider : MainAPI() {
         // Fetch season/episode breakdown
         val url = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/DETAIL/$sid?kids_safe=false&from=0&to=9"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
 
         if (data.resultCode != "OK") return null
 
@@ -428,7 +406,7 @@ class SonyLivProvider : MainAPI() {
     private suspend fun loadMovie(mid: String): MovieLoadResponse? {
         val url = "$apiBase/AGL/1.4/A/ENG/WEB/IN/PAGE/$mid?from=0&to=9"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
 
         val item  = data.resultObj?.containers?.firstOrNull()?.assets?.containers?.firstOrNull()
             ?: return null
@@ -450,7 +428,7 @@ class SonyLivProvider : MainAPI() {
     private suspend fun loadVideoList(gid: String, uri: String, total: Int): TvSeriesLoadResponse? {
         val url  = "$apiBase/AGL/1.4/A/ENG/WEB/IN/PAGE/$gid?from=0&to=9"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
 
         val items    = data.resultObj?.containers?.firstOrNull()?.assets?.containers ?: return null
         val episodes = items.mapNotNull { item ->
@@ -529,14 +507,14 @@ class SonyLivProvider : MainAPI() {
         }
         if (!resp.isSuccessful) return null
 
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
         return data.resultObj?.videoURL
     }
 
     private suspend fun getLiveUrl(vid: String): String? {
         val url  = "$apiBase/AGL/3.2/R/ENG/WEB/IN/ALL/CONTENT/VIDEOURL/VOD/$vid/freepreview?contactId=MSMIND"
         val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.safeText())
+        val data = parseJson<SonyResponse>(resp.text)
         return data.resultObj?.videoURL
     }
 }
