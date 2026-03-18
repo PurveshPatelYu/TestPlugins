@@ -38,7 +38,13 @@ class FlexibleContainerListDeserializer :
 }
 
 // ─── Data classes ─────────────────────────────────────────────────────────────
-
+data class SonySubtitle(
+    @JsonProperty("subtitleId") val subtitleId: String? = null,
+    @JsonProperty("subtitleType") val subtitleType: String? = null,
+    @JsonProperty("subtitleDisplayName") val subtitleDisplayName: String? = null,
+    @JsonProperty("subtitleLanguageName") val subtitleLanguageName: String? = null,
+    @JsonProperty("subtitleUrl") val subtitleUrl: String? = null,
+)
 data class SonyMetadata(
     @JsonProperty("title") val title: String? = null,
     @JsonProperty("episodeTitle") val episodeTitle: String? = null,
@@ -110,6 +116,7 @@ data class SonyResultObj(
     @JsonProperty("state_code") val stateCode: String? = null,
     @JsonProperty("channelPartnerID") val channelPartnerID: String? = null,
     @JsonProperty("dai_asset_key") val daiAssetKey: String? = null,
+    @JsonProperty("subtitle") val subtitle: List<SonySubtitle>? = null,
 )
 
 data class SonyResponse(
@@ -570,35 +577,63 @@ class SonyLivProvider : MainAPI() {
 
     // ── Load links ────────────────────────────────────────────────────────────
 
-    override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
-        ensureInit()
-        val clean  = data.clean()
-        val parts  = clean.split("::")
-        val vid    = parts.getOrElse(1) { clean }
-        val isLive = clean.contains("LIVE", ignoreCase = true)
+override suspend fun loadLinks(
+    data: String,
+    isCasting: Boolean,
+    subtitleCallback: (SubtitleFile) -> Unit,
+    callback: (ExtractorLink) -> Unit
+): Boolean {
+    ensureInit()
+    val clean  = data.clean()
+    val parts  = clean.split("::")
+    val vid    = parts.getOrElse(1) { clean }
+    val isLive = clean.contains("LIVE", ignoreCase = true)
 
-        val streamUrl = if (isLive) getLiveUrl(vid) else getVodUrl(vid)
-        if (streamUrl.isNullOrEmpty()) return false
+    val result = if (isLive) getLiveResult(vid) else getVodResult(vid)
+    val streamUrl = result?.videoURL
+    if (streamUrl.isNullOrEmpty()) return false
 
-        val type = when {
-            streamUrl.contains(".mpd")  -> ExtractorLinkType.DASH
-            else                        -> ExtractorLinkType.M3U8
-        }
-
-        callback.invoke(
-            newExtractorLink(source = name, name = name, url = streamUrl) {
-                this.referer = "$mainUrl/"
-                this.headers = buildHeaders()
-                this.type    = type
-            }
-        )
-        return true
+    // ── Subtitles ──────────────────────────────────────────────────────
+    result.subtitle?.forEach { sub ->
+        val subUrl  = sub.subtitleUrl ?: return@forEach
+        val subName = sub.subtitleDisplayName ?: sub.subtitleLanguageName ?: "Unknown"
+        subtitleCallback.invoke(SubtitleFile(subName, subUrl))
     }
+
+    // ── Stream ─────────────────────────────────────────────────────────
+    val type = when {
+        streamUrl.contains(".mpd") -> ExtractorLinkType.DASH
+        else                       -> ExtractorLinkType.M3U8
+    }
+
+    callback.invoke(
+        newExtractorLink(source = name, name = name, url = streamUrl) {
+            this.referer = "$mainUrl/"
+            this.headers = buildHeaders()
+            this.type    = type
+        }
+    )
+    return true
+}
+
+private suspend fun getVodResult(vid: String): SonyResultObj? {
+    var url  = "$apiBase/AGL/3.0/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
+    var resp = app.get(url, headers = buildHeaders())
+    if (!resp.isSuccessful) {
+        url  = "$apiBase/AGL/3.0/SR/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid"
+        resp = app.get(url, headers = buildHeaders())
+    }
+    if (!resp.isSuccessful) return null
+    return parseJson<SonyResponse>(resp.text).resultObj
+}
+
+private suspend fun getLiveResult(vid: String): SonyResultObj? {
+    val resp = app.get(
+        "$apiBase/AGL/3.2/R/ENG/WEB/IN/ALL/CONTENT/VIDEOURL/VOD/$vid/freepreview?contactId=MSMIND",
+        headers = buildHeaders()
+    )
+    return parseJson<SonyResponse>(resp.text).resultObj
+}
 
     private suspend fun getVodUrl(vid: String): String? {
         var url  = "$apiBase/AGL/3.0/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
