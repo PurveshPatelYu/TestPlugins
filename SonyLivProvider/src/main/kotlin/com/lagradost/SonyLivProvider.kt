@@ -208,38 +208,41 @@ class SonyLivProvider : MainAPI() {
     // ── Main page ─────────────────────────────────────────────────────────────
 
     override val mainPage = mainPageOf(
-        "7738|48"  to "TV Shows",
-        "7745|30"  to "Movies",
-        "7750|40"  to "Sports",
-        "35223|19" to "Premium",
+        "7738"  to "TV Shows",
+        "7745"  to "Movies",
+        "7750"  to "Sports",
+        "35223" to "Premium",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         ensureInit()
-        val (topId, pages) = request.data.split("|")
-        val items = getChannelItems(topId, pages.toInt())
+        val items = getChannelItems(request.data)
         return newHomePageResponse(request.name, items)
     }
 
-    private suspend fun getChannelItems(topId: String, pages: Int): List<SearchResponse> {
+    private suspend fun getChannelItems(topId: String): List<SearchResponse> {
         val url = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/PAGE-V2/$topId" +
-                "?kids_safe=false&from=0&to=14"
+                "?kids_safe=false&from=0&to=20"
         val resp = app.get(url, headers = buildHeaders())
         val data = parseJson<SonyResponse>(resp.text)
         val results = mutableListOf<SearchResponse>()
 
-        // v2 PAGE response: resultObj.containers = [{ id, metadata, retrieveItems, assets:{total, containers:[...shows...]} }]
+        // v2 PAGE response: each container is a tray definition with id, title/label,
+        // and retrieveItems.uri — there are NO assets/total at this level.
+        // We just list each tray as a clickable row.
         data.resultObj?.containers?.forEach { tray ->
-            val label = tray.metadata?.label ?: tray.title ?: return@forEach
-            val total = tray.assets?.total ?: return@forEach
-            if (total == 0) return@forEach
-            val cid   = tray.id ?: tray.metadata?.id ?: return@forEach
-            val thumb = tray.assets?.containers?.firstOrNull()?.metadata?.emfAttributes
-                ?.let { it.portraitThumb ?: it.thumbnail } ?: ""
+            val label = tray.title
+                ?: tray.metadata?.label
+                ?: return@forEach
+            val cid = tray.id
+                ?: tray.metadata?.id
+                ?: return@forEach
+            // Skip ad/promo trays that have no retrieveItems
+            tray.retrieveItems?.uri ?: return@forEach
 
             results.add(
-                newMovieSearchResponse(label, "CHANNEL::$cid:::$total", TvType.Movie) {
-                    this.posterUrl = thumb
+                newMovieSearchResponse(label, "CHANNEL::$cid", TvType.Movie) {
+                    this.posterUrl = ""
                 }
             )
         }
@@ -294,20 +297,18 @@ class SonyLivProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         ensureInit()
-        // Data format: "KIND::id::stype::extra"
+        // Data format: "KIND::id[::extra]"
         val parts = url.split("::")
         if (parts.isEmpty()) return null
 
-        val kind  = parts[0]
-        val id    = parts.getOrElse(1) { "" }
-        val stype = parts.getOrElse(2) { "" }
-        val extra = parts.getOrElse(3) { "" }
+        val kind = parts[0]
+        val id   = parts.getOrElse(1) { "" }
 
         return when (kind) {
             "CHANNEL" -> loadShowContainer(id)
             "SHOW"    -> loadShow(id)
             "MOVIE"   -> loadMovie(id)
-            "PLAY"    -> null  // handled by loadLinks, not load()
+            "PLAY"    -> null  // handled by loadLinks only
             else      -> loadShow(id)
         }
     }
