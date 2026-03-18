@@ -58,7 +58,7 @@ data class SonyMetadata(
     @JsonProperty("contentId") val contentId: Long? = null,
     @JsonProperty("objectType") val objectType: String? = null,
     @JsonProperty("contentType") val contentType: String? = null,
-    @JsonProperty("season") val season: String? = null,
+    @JsonProperty("season") val season: Int? = null,
 )
 
 data class SonyEmfAttributes(
@@ -397,7 +397,7 @@ class SonyLivProvider : MainAPI() {
                     // Bundle id is e.g. 1590014677 — NOT the show id
                     val bundleId    = bundle.idStr() ?: return@forEach
                     val bundleTitle = bundle.metadata?.title ?: bundleId  // e.g. "4601-4700"
-                    val seasonNum   = bundle.metadata?.season?.toIntOrNull()
+                    val seasonNum   = bundle.metadata?.season
                     val bundleThumb = bundle.metadata?.emfAttributes?.let {
                         it.portraitThumb ?: it.thumbnail ?: it.landscapeThumb
                     } ?: showPoster
@@ -427,7 +427,7 @@ class SonyLivProvider : MainAPI() {
                             episodes.add(newEpisode("PLAY::$itemId") {
                                 this.name        = epTitle
                                 this.episode     = meta.episodeNumber
-                                this.season      = meta.season?.toIntOrNull()
+                                this.season      = meta.season
                                 this.posterUrl   = thumb
                                 this.description = meta.longDescription
                                 this.runTime     = meta.duration?.div(60)
@@ -468,19 +468,29 @@ class SonyLivProvider : MainAPI() {
      * Uses TRAY/SEARCH/VOD?filter_parentId={bundleId} — the same endpoint the web app uses.
      * Dispatched when user taps a "4601-4700" bundle row (data = "BUNDLE::bundleId").
      */
+    /**
+     * Load episodes inside a bundle (e.g. "1-100", "4601-4700").
+     *
+     * The CONTENT/DETAIL/BUNDLE endpoint only returns bundle metadata — NOT episodes.
+     * Episodes are fetched from the TRAY/SEARCH/VOD endpoint using filter_parentId.
+     * Response structure: resultObj.containers[] — each is a VOD episode directly.
+     */
     private suspend fun loadBundle(bundleId: String): TvSeriesLoadResponse? {
-        // First get bundle metadata for title/poster
+        // Get bundle metadata (title like "4601-4700", season number, poster)
         val bundleMetaUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$bundleId?from=0&to=1&kids_safe=false"
         val bundleMetaResp = app.get(bundleMetaUrl, headers = buildHeaders())
         val bundleMetaData = parseJson<SonyResponse>(bundleMetaResp.text)
-        val bundleMeta     = bundleMetaData.resultObj?.containers?.firstOrNull()?.metadata
-        val bundleTitle    = bundleMeta?.title ?: bundleId
-        val bundlePoster   = bundleMeta?.emfAttributes?.let {
+        val bundleContainer = bundleMetaData.resultObj?.containers?.firstOrNull()
+        val bundleMeta      = bundleContainer?.metadata
+        val bundleTitle     = bundleMeta?.title ?: bundleId
+        val bundleSeason    = bundleMeta?.season
+        val bundlePoster    = bundleMeta?.emfAttributes?.let {
             it.portraitThumb ?: it.thumbnail ?: it.landscapeThumb
         } ?: ""
 
-        // Fetch actual episodes via the TRAY/SEARCH/VOD endpoint
-        val epUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/TRAY/SEARCH/VOD" +
+        // Fetch episodes using the retrieveItems URI pattern from the bundle
+        // URI: /TRAY/SEARCH/VOD?filter_parentId={bundleId}&filter_contentType=VOD
+        val epUrl = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/TRAY/SEARCH/VOD" +
                 "?filter_parentId=$bundleId&filter_contentType=VOD" +
                 "&from=0&to=100&orderBy=episodeNumber&sortOrder=asc&kids_safe=false"
         val epResp = app.get(epUrl, headers = buildHeaders())
@@ -488,24 +498,24 @@ class SonyLivProvider : MainAPI() {
 
         val episodes = mutableListOf<Episode>()
 
-        // Episodes are in resultObj.containers[0].assets.containers OR resultObj.containers
-        val items = epData.resultObj?.containers?.firstOrNull()?.assets?.containers
-            ?: epData.resultObj?.containers
-            ?: emptyList()
+        // TRAY/SEARCH/VOD response: episodes are directly in resultObj.containers[]
+        // Each container is a VOD item with metadata.contentSubtype = "EPISODE"
+        val items = epData.resultObj?.containers ?: emptyList()
 
         items.forEach { item ->
-            val meta   = item.metadata ?: return@forEach
-            val itemId = item.idStr() ?: return@forEach
-            val emf    = meta.emfAttributes
-            val thumb  = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: bundlePoster
-            val epNum  = meta.episodeNumber
+            val meta    = item.metadata ?: return@forEach
+            val itemId  = item.idStr() ?: return@forEach
+            val emf     = meta.emfAttributes
+            val thumb   = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: bundlePoster
+            val epNum   = meta.episodeNumber
             val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
+                ?: meta.title?.takeIf { it.isNotBlank() }
                 ?: "Ep $epNum"
 
             episodes.add(newEpisode("PLAY::$itemId") {
                 this.name        = epTitle
                 this.episode     = epNum
-                this.season      = meta.season?.toIntOrNull()
+                this.season      = bundleSeason
                 this.posterUrl   = thumb
                 this.description = meta.longDescription
                 this.runTime     = meta.duration?.div(60)
