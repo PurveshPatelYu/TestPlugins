@@ -162,6 +162,7 @@ class SonyLivProvider : MainAPI() {
         "Accept-Language" to "en-US,en;q=0.9",
         "Origin"          to mainUrl,
         "Referer"         to "$mainUrl/",
+        "x-playback-session-id" to sessionId,
         "X-Via-Device"    to "true",
         "Session_id"      to sessionId,
         "Security_token"  to securityToken,
@@ -584,13 +585,6 @@ class SonyLivProvider : MainAPI() {
         val streamUrl = if (isLive) getLiveUrl(vid) else getVodUrl(vid)
         if (streamUrl.isNullOrEmpty()) return false
 
-        val quality = when {
-            streamUrl.contains("4k",   ignoreCase = true) -> Qualities.P2160.value
-            streamUrl.contains("1080", ignoreCase = true) -> Qualities.P1080.value
-            streamUrl.contains("720",  ignoreCase = true) -> Qualities.P720.value
-            else                                           -> Qualities.Unknown.value
-        }
-
         val type = when {
             streamUrl.contains(".mpd")  -> ExtractorLinkType.DASH
             else                        -> ExtractorLinkType.M3U8
@@ -599,7 +593,7 @@ class SonyLivProvider : MainAPI() {
         callback.invoke(
             newExtractorLink(source = name, name = name, url = streamUrl) {
                 this.referer = "$mainUrl/"
-                this.quality = quality
+                this.headers = buildHeaders()
                 this.type    = type
             }
         )
