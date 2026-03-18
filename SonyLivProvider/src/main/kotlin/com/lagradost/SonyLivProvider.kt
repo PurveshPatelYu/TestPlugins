@@ -232,14 +232,14 @@ class SonyLivProvider : MainAPI() {
             val total = container.assets?.total ?: return@forEach
             if (total == 0) return@forEach
             val cid   = container.metadata.id ?: return@forEach
-            val uri   = container.actions?.firstOrNull()?.uri ?: ""
             val stype = data.resultObj.metadata?.pageId ?: ""
             val thumb = container.metadata.emfAttributes?.portraitThumb
                 ?: container.metadata.emfAttributes?.thumbnail ?: ""
 
-            // Treat each channel/category row as a search result pointing to its listing
+            // Data format: "KIND::cid::stype::total"
+            // Using :: as separator — safe since SonyLIV IDs never contain ::
             results.add(
-                newMovieSearchResponse(label, "$cid|$stype|$uri|$total|CHANNEL", TvType.Movie) {
+                newMovieSearchResponse(label, "CHANNEL::$cid::$stype::$total", TvType.Movie) {
                     this.posterUrl = thumb
                 }
             )
@@ -274,14 +274,14 @@ class SonyLivProvider : MainAPI() {
                 if (idx == 0) {
                     // TV Shows → TvSeries
                     results.add(
-                        newTvSeriesSearchResponse(title, "$sid|$stype|$total|SHOW", TvType.TvSeries) {
+                        newTvSeriesSearchResponse(title, "SHOW::$sid::$stype::$total", TvType.TvSeries) {
                             this.posterUrl = thumb
                         }
                     )
                 } else {
                     // Movies
                     results.add(
-                        newMovieSearchResponse(title, "$sid||$total|MOVIE", TvType.Movie) {
+                        newMovieSearchResponse(title, "MOVIE::$sid:::", TvType.Movie) {
                             this.posterUrl = thumb
                         }
                     )
@@ -295,26 +295,29 @@ class SonyLivProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         ensureInit()
-        val parts = url.split("|")
-        if (parts.size < 4) return null
+        // Data format: "KIND::id::stype::extra"
+        val parts = url.split("::")
+        if (parts.isEmpty()) return null
 
-        val id    = parts[0]
-        val stype = parts[1]
-        val kind  = parts[3]   // CHANNEL | SHOW | MOVIE
+        val kind  = parts[0]
+        val id    = parts.getOrElse(1) { "" }
+        val stype = parts.getOrElse(2) { "" }
+        val extra = parts.getOrElse(3) { "" }
 
         return when (kind) {
-            "CHANNEL" -> loadChannel(id, stype, parts[2], parts.getOrNull(4)?.toIntOrNull() ?: 100)
+            "CHANNEL" -> loadChannel(id, stype, extra.toIntOrNull() ?: 100)
             "SHOW"    -> loadShow(id)
             "MOVIE"   -> loadMovie(id)
+            "PLAY"    -> null  // handled by loadLinks, not load()
             else      -> loadShow(id)
         }
     }
 
     /** A channel listing — resolve the show list under it */
-    private suspend fun loadChannel(cid: String, stype: String, uri: String, total: Int): LoadResponse? {
+    private suspend fun loadChannel(cid: String, stype: String, total: Int): LoadResponse? {
         // If it's a movie/video type, fetch items directly
         if (stype in listOf("CLIP", "BEHIND_THE_SCENES", "movies", "channels", "LIVE_SPORT", "HIGHLIGHTS")) {
-            return loadVideoList(cid, uri, total)
+            return loadVideoList(cid, "", total)
         }
         // Otherwise it's a TV show container
         return loadShowContainer(cid)
@@ -364,7 +367,7 @@ class SonyLivProvider : MainAPI() {
 
             when (stype) {
                 "MOVIE", "SPORTS_CLIPS", "EPISODE", "HIGHLIGHTS" -> {
-                    episodes.add(newEpisode("$sid||$itemTotal|MOVIE") {
+                    episodes.add(newEpisode("PLAY::$sid") {
                         this.name        = epTitle
                         this.posterUrl   = epPoster
                         this.description = meta.longDescription
@@ -372,7 +375,7 @@ class SonyLivProvider : MainAPI() {
                 }
                 else -> {
                     // It's a TV show — link to seasons
-                    episodes.add(newEpisode("$sid|$stype|$itemTotal|SHOW") {
+                    episodes.add(newEpisode("SHOW::$sid::$stype::")) {
                         this.name      = epTitle
                         this.posterUrl = epPoster
                     })
@@ -418,7 +421,7 @@ class SonyLivProvider : MainAPI() {
 
             if (subtype == "EPISODE") {
                 val epName = "$stitle Episode ${meta.episodeNumber}"
-                episodes.add(newEpisode("$itemSid||$epCount|EPISODE") {
+                episodes.add(newEpisode("PLAY::$itemSid") {
                     this.name        = epName
                     this.episode     = meta.episodeNumber
                     this.posterUrl   = epPoster
@@ -427,7 +430,7 @@ class SonyLivProvider : MainAPI() {
                 })
             } else {
                 // Season node — link through to episode list
-                episodes.add(newEpisode("$itemSid||$epCount|SEASON") {
+                episodes.add(newEpisode("SHOW::$itemSid::") {
                     this.name      = stitle
                     this.posterUrl = epPoster
                 })
@@ -455,7 +458,7 @@ class SonyLivProvider : MainAPI() {
             emf?.castAndCrew?.let { append("\n\n$it") }
         }
 
-        return newMovieLoadResponse(title, mid, TvType.Movie, "$mid||0|PLAY_MOVIE") {
+        return newMovieLoadResponse(title, mid, TvType.Movie, "PLAY::$mid") {
             this.plot      = plot
             this.posterUrl = emf?.portraitThumb ?: emf?.thumbnail ?: ""
             this.year      = meta.year
@@ -473,7 +476,7 @@ class SonyLivProvider : MainAPI() {
             val title = meta.episodeTitle?.takeIf { it.isNotBlank() } ?: meta.title ?: return@mapNotNull null
             val mid   = item.id ?: return@mapNotNull null
             val emf   = meta.emfAttributes
-            newEpisode("$mid||$total|PLAY_MOVIE") {
+            newEpisode("PLAY::$mid") {
                 this.name        = title
                 this.posterUrl   = emf?.portraitThumb ?: emf?.thumbnail ?: ""
                 this.description = meta.longDescription
@@ -497,9 +500,12 @@ class SonyLivProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         ensureInit()
-        val parts  = data.split("|")
-        val vid    = parts[0]
-        val isLive = parts.getOrNull(3) == "LIVE"
+        val parts  = data.split("::")
+        // For PLAY::vid entries go straight to stream
+        // For SHOW::sid entries we need to drill into loadShow first — but
+        // loadLinks is only called on playable episodes so this should always be PLAY
+        val vid    = parts.getOrElse(1) { parts[0] }
+        val isLive = data.contains("LIVE", ignoreCase = true)
 
         val streamUrl = if (isLive) getLiveUrl(vid) else getVodUrl(vid)
         if (streamUrl.isNullOrEmpty()) return false
