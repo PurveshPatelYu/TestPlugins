@@ -482,21 +482,14 @@ class SonyLivProvider : MainAPI() {
             else                                          -> ExtractorLinkType.M3U8
         }
 
-        val linkHeaders = mapOf(
-            "User-Agent"             to "Mozilla/5.0 (Linux; Android 7.1.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Referer"                to "https://www.sonyliv.com/",
-            "x-playback-session-id" to sessionId,
-        )
-
         callback.invoke(
-            ExtractorLink(
+            newExtractorLink(
                 source  = name,
                 name    = name,
                 url     = url,
                 referer = "https://www.sonyliv.com/",
                 quality = quality,
-                headers = linkHeaders,
-                type    = type,
+                isM3u8  = type == ExtractorLinkType.M3U8,
             )
         )
         return true
