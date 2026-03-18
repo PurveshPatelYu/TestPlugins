@@ -18,5 +18,4 @@ cloudstream {
 
     iconUrl = "https://play-lh.googleusercontent.com/LW-VJQLQB4A9aLs6SaZbsAc3V0Q0MKIU-MRjqNitLLnvS1D9eZ3ZDqMJ5X3bQ8suYg=s180"
     language = "hi"
-    name     = "SonyLIV"
 }
