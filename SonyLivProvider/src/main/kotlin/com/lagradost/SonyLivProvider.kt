@@ -401,12 +401,29 @@ class SonyLivProvider : MainAPI() {
                     val bundleThumb = bundle.metadata?.emfAttributes?.let {
                         it.portraitThumb ?: it.thumbnail ?: it.landscapeThumb
                     } ?: showPoster
+                    val bundleMetaUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$bundleId?from=0&to=100&orderBy=episodeNumber&sortOrder=desc&kids_safe=false"
+                    val bundleMetaResp = app.get(bundleMetaUrl, headers = buildHeaders())
+                    val bundleMetaData = parseJson<SonyResponse>(bundleMetaResp.text)
+                    val items = bundleMetaData.resultObj?.containers.containers ?: emptyList()
+                    items.forEach { item ->
+                        val meta    = item.metadata ?: return@forEach
+                        val itemId  = item.idStr() ?: return@forEach
+                        val emf     = meta.emfAttributes
+                        val thumb   = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: bundlePoster
+                        val epNum   = meta.episodeNumber
+                        val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
+                            ?: meta.title?.takeIf { it.isNotBlank() }
+                            ?: "Ep $epNum"
 
-                    episodes.add(newEpisode("BUNDLE::$bundleId") {
-                        this.name      = bundleTitle
-                        this.season    = seasonNum
-                        this.posterUrl = bundleThumb
-                    })
+                        episodes.add(newEpisode("PLAY::$itemId") {
+                            this.name        = epTitle
+                            this.episode     = epNum
+                            this.season      = bundleSeason
+                            this.posterUrl   = thumb
+                            this.description = meta.longDescription
+                            this.runTime     = meta.duration?.div(60)
+                        })
+                    }
                 }
             }
 
@@ -477,7 +494,7 @@ class SonyLivProvider : MainAPI() {
      */
     private suspend fun loadBundle(bundleId: String): TvSeriesLoadResponse? {
         // Get bundle metadata (title like "4601-4700", season number, poster)
-        val bundleMetaUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$bundleId?from=0&to=1&kids_safe=false"
+        val bundleMetaUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$bundleId"
         val bundleMetaResp = app.get(bundleMetaUrl, headers = buildHeaders())
         val bundleMetaData = parseJson<SonyResponse>(bundleMetaResp.text)
         val bundleContainer = bundleMetaData.resultObj?.containers?.firstOrNull()
