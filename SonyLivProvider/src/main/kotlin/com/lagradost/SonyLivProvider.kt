@@ -353,8 +353,6 @@ class SonyLivProvider : MainAPI() {
 
         if (data.resultCode != "OK") return null
 
-        // DETAIL response: resultObj.containers[0] = the show itself
-        // resultObj.containers[0].containers = seasons or episodes
         val showContainer = data.resultObj?.containers?.firstOrNull() ?: return null
         val showMeta      = showContainer.metadata
         val showEmf       = showMeta?.emfAttributes
@@ -364,48 +362,64 @@ class SonyLivProvider : MainAPI() {
         val showPoster = showEmf?.let { it.portraitThumb ?: it.poster ?: it.thumbnail } ?: ""
         val showYear   = showMeta?.year
 
-        val children   = showContainer.containers ?: emptyList()
-        val episodes   = mutableListOf<Episode>()
+        val children = showContainer.containers ?: emptyList()
+        val episodes = mutableListOf<Episode>()
 
-        children.forEach { item ->
-            val meta    = item.metadata ?: return@forEach
-            val subtype = meta.contentSubtype ?: meta.objectSubtype ?: ""
-            val itemId  = item.id ?: return@forEach
-            val emf     = meta.emfAttributes
-            val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: ""
+        // Detect if children are season-bundle nodes (e.g. "4601-4700") vs real episodes.
+        // Season bundles have contentSubtype = "SEASON" and their episodeTitle looks like "N-M"
+        // or their title is a range. We fetch all individual episodes from each bundle.
+        val firstSubtype = children.firstOrNull()?.metadata?.contentSubtype ?: ""
+        val isSeasonBundles = firstSubtype == "SEASON"
 
-            when (subtype) {
-                "EPISODE" -> {
-                    // Direct episode — playable
-                    val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
-                        ?: "${showTitle} Ep ${meta.episodeNumber}"
-                    episodes.add(newEpisode("PLAY::$itemId") {
-                        this.name        = epTitle
-                        this.episode     = meta.episodeNumber
-                        this.posterUrl   = thumb
-                        this.description = meta.longDescription
-                        this.runTime     = meta.duration?.div(60)
-                    })
-                }
-                "SEASON", "SHOW" -> {
-                    // Season node — drill in to get its episodes
-                    // Represent as a "season" episode that load() will resolve
-                    val seasonTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
-                        ?: meta.title ?: "Season"
-                    episodes.add(newEpisode("SHOW::$itemId") {
-                        this.name      = seasonTitle
-                        this.posterUrl = thumb
-                    })
-                }
-                else -> {
-                    // Clip / highlight / movie inside a show — treat as playable
-                    val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
-                        ?: meta.title ?: showTitle
-                    episodes.add(newEpisode("PLAY::$itemId") {
-                        this.name        = epTitle
-                        this.posterUrl   = thumb
-                        this.description = meta.longDescription
-                    })
+        if (isSeasonBundles) {
+            // Each child is a bundle — fetch actual episodes from each bundle in parallel
+            // and flatten into a single episode list sorted by episode number
+            children.forEach { bundle ->
+                val bundleId = bundle.id ?: return@forEach
+                val bundleEpisodes = fetchBundleEpisodes(bundleId, showTitle, showPoster)
+                episodes.addAll(bundleEpisodes)
+            }
+            // Sort by episode number ascending so Ep 1 is first
+            episodes.sortBy { it.episode ?: Int.MAX_VALUE }
+        } else {
+            // Direct children: either individual episodes or named seasons (multi-season show)
+            children.forEach { item ->
+                val meta    = item.metadata ?: return@forEach
+                val subtype = meta.contentSubtype ?: meta.objectSubtype ?: ""
+                val itemId  = item.id ?: return@forEach
+                val emf     = meta.emfAttributes
+                val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: ""
+
+                when (subtype) {
+                    "EPISODE" -> {
+                        val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
+                            ?: "Ep ${meta.episodeNumber}"
+                        episodes.add(newEpisode("PLAY::$itemId") {
+                            this.name        = epTitle
+                            this.episode     = meta.episodeNumber
+                            this.posterUrl   = thumb
+                            this.description = meta.longDescription
+                            this.runTime     = meta.duration?.div(60)
+                        })
+                    }
+                    "SEASON", "SHOW" -> {
+                        // Named season (e.g. "Season 1", "Season 2") — drill into it
+                        val seasonTitle = meta.title?.takeIf { it.isNotBlank() } ?: "Season"
+                        episodes.add(newEpisode("SHOW::$itemId") {
+                            this.name      = seasonTitle
+                            this.season    = meta.episodeNumber
+                            this.posterUrl = thumb
+                        })
+                    }
+                    else -> {
+                        val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
+                            ?: meta.title ?: showTitle
+                        episodes.add(newEpisode("PLAY::$itemId") {
+                            this.name        = epTitle
+                            this.posterUrl   = thumb
+                            this.description = meta.longDescription
+                        })
+                    }
                 }
             }
         }
@@ -416,6 +430,47 @@ class SonyLivProvider : MainAPI() {
             this.year      = showYear
             this.tags      = showMeta?.genres
         }
+    }
+
+    /**
+     * Fetch individual episodes from a season bundle node.
+     * A bundle is a DETAIL container whose children are actual EPISODEs.
+     */
+    private suspend fun fetchBundleEpisodes(
+        bundleId: String,
+        showTitle: String,
+        showPoster: String
+    ): List<Episode> {
+        val url  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/DETAIL/$bundleId?kids_safe=false&from=0&to=100"
+        val resp = app.get(url, headers = buildHeaders())
+        val data = parseJson<SonyResponse>(resp.text)
+
+        if (data.resultCode != "OK") return emptyList()
+
+        val bundleContainer = data.resultObj?.containers?.firstOrNull() ?: return emptyList()
+        val children        = bundleContainer.containers ?: return emptyList()
+        val episodes        = mutableListOf<Episode>()
+
+        children.forEach { item ->
+            val meta   = item.metadata ?: return@forEach
+            val itemId = item.id ?: return@forEach
+            val emf    = meta.emfAttributes
+            val thumb  = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: showPoster
+
+            // Individual episode inside a bundle
+            val epNum   = meta.episodeNumber
+            val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
+                ?: "Ep $epNum"
+
+            episodes.add(newEpisode("PLAY::$itemId") {
+                this.name        = epTitle
+                this.episode     = epNum
+                this.posterUrl   = thumb
+                this.description = meta.longDescription
+                this.runTime     = meta.duration?.div(60)
+            })
+        }
+        return episodes
     }
 
     private suspend fun loadMovie(mid: String): MovieLoadResponse? {
