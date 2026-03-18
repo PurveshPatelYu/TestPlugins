@@ -56,6 +56,9 @@ data class SonyMetadata(
     @JsonProperty("id") val id: String? = null,
     @JsonProperty("emfAttributes") val emfAttributes: SonyEmfAttributes? = null,
     @JsonProperty("contentId") val contentId: Long? = null,
+    @JsonProperty("objectType") val objectType: String? = null,
+    @JsonProperty("contentType") val contentType: String? = null,
+    @JsonProperty("season") val season: String? = null,
 )
 
 data class SonyEmfAttributes(
@@ -138,7 +141,8 @@ class SonyLivProvider : MainAPI() {
     override var lang           = "hi"
     override val hasMainPage    = true
 
-    private val apiBase      = "https://apiv2.sonyliv.com"
+    private val apiBase      = "https://apiv2.sonyliv.com"  // token/ULD/stream endpoints
+    private val apiBase3     = "https://apiv3.sonyliv.com"  // detail/bundle/episode endpoints
     private val appVersion   = "3.5.8"
     private val deviceId     = "9c7631d21edd4a65a92b2b641c8a13a2-1634808345996"
     private val xForwardedFor = "103.250.158.149"
@@ -336,9 +340,10 @@ class SonyLivProvider : MainAPI() {
         if (id.isBlank()) return null
 
         return when (kind) {
-            "SHOW"  -> loadShow(id)
-            "MOVIE" -> loadMovie(id)
-            else    -> loadShow(id)
+            "SHOW"   -> loadShow(id)
+            "MOVIE"  -> loadMovie(id)
+            "BUNDLE" -> loadBundle(id)
+            else     -> loadShow(id)
         }
     }
 
@@ -346,79 +351,105 @@ class SonyLivProvider : MainAPI() {
      * Load a show's season/episode list.
      * DETAIL endpoint returns seasons (or directly episodes for single-season shows).
      */
+    /**
+     * Load a show. Handles three show types:
+     *
+     * 1. GROUP_OF_BUNDLES (e.g. TMKOC) — no direct children in DETAIL response.
+     *    Must call CONTENT/DETAIL/BUNDLE/{showId} to get EPISODE_RANGE bundles,
+     *    then show the latest bundle's episodes via TRAY/SEARCH/VOD?filter_parentId={bundleId}
+     *
+     * 2. SHOW with direct EPISODE children (e.g. single-season shows)
+     *    DETAIL returns episodes directly in containers[0].containers
+     *
+     * 3. SHOW with SEASON children (multi-season shows like Shark Tank)
+     *    Each season is drillable via SHOW::seasonId
+     */
     private suspend fun loadShow(sid: String): TvSeriesLoadResponse? {
-        val url  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/DETAIL/$sid?kids_safe=false&from=0&to=20"
-        val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.text)
+        val detailUrl  = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/DETAIL/$sid"
+        val detailResp = app.get(detailUrl, headers = buildHeaders())
+        val detailData = parseJson<SonyResponse>(detailResp.text)
 
-        if (data.resultCode != "OK") return null
+        if (detailData.resultCode != "OK") return null
 
-        val showContainer = data.resultObj?.containers?.firstOrNull() ?: return null
+        val showContainer = detailData.resultObj?.containers?.firstOrNull() ?: return null
         val showMeta      = showContainer.metadata
         val showEmf       = showMeta?.emfAttributes
+        val showTitle     = showMeta?.title ?: "SonyLIV"
+        val showPlot      = showMeta?.longDescription ?: ""
+        val showPoster    = showEmf?.let { it.portraitThumb ?: it.poster ?: it.thumbnail } ?: ""
+        val showYear      = showMeta?.year
+        val objectType    = showMeta?.objectType ?: showMeta?.contentType ?: ""
 
-        val showTitle  = showMeta?.title ?: "SonyLIV"
-        val showPlot   = showMeta?.longDescription ?: ""
-        val showPoster = showEmf?.let { it.portraitThumb ?: it.poster ?: it.thumbnail } ?: ""
-        val showYear   = showMeta?.year
-
-        val children = showContainer.containers ?: emptyList()
         val episodes = mutableListOf<Episode>()
 
-        // Detect if children are season-bundle nodes (e.g. "4601-4700") vs real episodes.
-        // Season bundles have contentSubtype = "SEASON" and their episodeTitle looks like "N-M"
-        // or their title is a range. We fetch all individual episodes from each bundle.
-        val firstSubtype = children.firstOrNull()?.metadata?.contentSubtype ?: ""
-        val isSeasonBundles = firstSubtype == "SEASON"
+        when {
+            // ── Type 1: GROUP_OF_BUNDLES (TMKOC-style, 100s of episodes in range buckets)
+            objectType == "GROUP_OF_BUNDLES" -> {
+                // Fetch the list of EPISODE_RANGE bundles for this show
+                val bundleListUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$sid?from=0&to=50&kids_safe=false"
+                val bundleListResp = app.get(bundleListUrl, headers = buildHeaders())
+                val bundleListData = parseJson<SonyResponse>(bundleListResp.text)
 
-        if (isSeasonBundles) {
-            // Each child is a bundle — fetch actual episodes from each bundle in parallel
-            // and flatten into a single episode list sorted by episode number
-            children.forEach { bundle ->
-                val bundleId = bundle.id ?: return@forEach
-                val bundleEpisodes = fetchBundleEpisodes(bundleId, showTitle, showPoster)
-                episodes.addAll(bundleEpisodes)
+                // Each container is a bundle like { id, metadata.title="4601-4700", metadata.season="47" }
+                val bundles = bundleListData.resultObj?.containers ?: emptyList()
+
+                bundles.forEach { bundle ->
+                    val bundleId     = bundle.id?.toString() ?: return@forEach
+                    val bundleTitle  = bundle.metadata?.title ?: bundleId   // e.g. "4601-4700"
+                    val seasonNum    = bundle.metadata?.season?.toIntOrNull()
+                    val bundleThumb  = bundle.metadata?.emfAttributes?.let {
+                        it.portraitThumb ?: it.thumbnail ?: it.landscapeThumb
+                    } ?: showPoster
+
+                    // Show each bundle as a "season" row the user can tap to get its episodes
+                    episodes.add(newEpisode("BUNDLE::$bundleId") {
+                        this.name      = bundleTitle
+                        this.season    = seasonNum
+                        this.posterUrl = bundleThumb
+                    })
+                }
             }
-            // Sort by episode number ascending so Ep 1 is first
-            episodes.sortBy { it.episode ?: Int.MAX_VALUE }
-        } else {
-            // Direct children: either individual episodes or named seasons (multi-season show)
-            children.forEach { item ->
-                val meta    = item.metadata ?: return@forEach
-                val subtype = meta.contentSubtype ?: meta.objectSubtype ?: ""
-                val itemId  = item.id ?: return@forEach
-                val emf     = meta.emfAttributes
-                val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: ""
 
-                when (subtype) {
-                    "EPISODE" -> {
-                        val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
-                            ?: "Ep ${meta.episodeNumber}"
-                        episodes.add(newEpisode("PLAY::$itemId") {
-                            this.name        = epTitle
-                            this.episode     = meta.episodeNumber
-                            this.posterUrl   = thumb
-                            this.description = meta.longDescription
-                            this.runTime     = meta.duration?.div(60)
-                        })
-                    }
-                    "SEASON", "SHOW" -> {
-                        // Named season (e.g. "Season 1", "Season 2") — drill into it
-                        val seasonTitle = meta.title?.takeIf { it.isNotBlank() } ?: "Season"
-                        episodes.add(newEpisode("SHOW::$itemId") {
-                            this.name      = seasonTitle
-                            this.season    = meta.episodeNumber
-                            this.posterUrl = thumb
-                        })
-                    }
-                    else -> {
-                        val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
-                            ?: meta.title ?: showTitle
-                        episodes.add(newEpisode("PLAY::$itemId") {
-                            this.name        = epTitle
-                            this.posterUrl   = thumb
-                            this.description = meta.longDescription
-                        })
+            // ── Type 2 & 3: regular SHOW — children are direct episodes or named seasons
+            else -> {
+                val children = showContainer.containers ?: emptyList()
+                children.forEach { item ->
+                    val meta    = item.metadata ?: return@forEach
+                    val subtype = meta.contentSubtype ?: meta.objectSubtype ?: ""
+                    val itemId  = item.id?.toString() ?: return@forEach
+                    val emf     = meta.emfAttributes
+                    val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: showPoster
+
+                    when (subtype) {
+                        "EPISODE" -> {
+                            val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
+                                ?: "Ep ${meta.episodeNumber}"
+                            episodes.add(newEpisode("PLAY::$itemId") {
+                                this.name        = epTitle
+                                this.episode     = meta.episodeNumber
+                                this.season      = meta.season?.toIntOrNull()
+                                this.posterUrl   = thumb
+                                this.description = meta.longDescription
+                                this.runTime     = meta.duration?.div(60)
+                            })
+                        }
+                        "SEASON" -> {
+                            val seasonTitle = meta.title?.takeIf { it.isNotBlank() } ?: "Season"
+                            episodes.add(newEpisode("SHOW::$itemId") {
+                                this.name      = seasonTitle
+                                this.season    = meta.episodeNumber
+                                this.posterUrl = thumb
+                            })
+                        }
+                        else -> {
+                            val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
+                                ?: meta.title ?: showTitle
+                            episodes.add(newEpisode("PLAY::$itemId") {
+                                this.name        = epTitle
+                                this.posterUrl   = thumb
+                                this.description = meta.longDescription
+                            })
+                        }
                     }
                 }
             }
@@ -433,48 +464,61 @@ class SonyLivProvider : MainAPI() {
     }
 
     /**
-     * Fetch individual episodes from a season bundle node.
-     * A bundle is a DETAIL container whose children are actual EPISODEs.
+     * Load individual episodes from an EPISODE_RANGE bundle.
+     * Uses TRAY/SEARCH/VOD?filter_parentId={bundleId} — the same endpoint the web app uses.
+     * Dispatched when user taps a "4601-4700" bundle row (data = "BUNDLE::bundleId").
      */
-    private suspend fun fetchBundleEpisodes(
-        bundleId: String,
-        showTitle: String,
-        showPoster: String
-    ): List<Episode> {
-        val url  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/DETAIL/$bundleId?kids_safe=false&from=0&to=100"
-        val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.text)
+    private suspend fun loadBundle(bundleId: String): TvSeriesLoadResponse? {
+        // First get bundle metadata for title/poster
+        val bundleMetaUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$bundleId?from=0&to=1&kids_safe=false"
+        val bundleMetaResp = app.get(bundleMetaUrl, headers = buildHeaders())
+        val bundleMetaData = parseJson<SonyResponse>(bundleMetaResp.text)
+        val bundleMeta     = bundleMetaData.resultObj?.containers?.firstOrNull()?.metadata
+        val bundleTitle    = bundleMeta?.title ?: bundleId
+        val bundlePoster   = bundleMeta?.emfAttributes?.let {
+            it.portraitThumb ?: it.thumbnail ?: it.landscapeThumb
+        } ?: ""
 
-        if (data.resultCode != "OK") return emptyList()
+        // Fetch actual episodes via the TRAY/SEARCH/VOD endpoint
+        val epUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/TRAY/SEARCH/VOD" +
+                "?filter_parentId=$bundleId&filter_contentType=VOD" +
+                "&from=0&to=100&orderBy=episodeNumber&sortOrder=asc&kids_safe=false"
+        val epResp = app.get(epUrl, headers = buildHeaders())
+        val epData = parseJson<SonyResponse>(epResp.text)
 
-        val bundleContainer = data.resultObj?.containers?.firstOrNull() ?: return emptyList()
-        val children        = bundleContainer.containers ?: return emptyList()
-        val episodes        = mutableListOf<Episode>()
+        val episodes = mutableListOf<Episode>()
 
-        children.forEach { item ->
+        // Episodes are in resultObj.containers[0].assets.containers OR resultObj.containers
+        val items = epData.resultObj?.containers?.firstOrNull()?.assets?.containers
+            ?: epData.resultObj?.containers
+            ?: emptyList()
+
+        items.forEach { item ->
             val meta   = item.metadata ?: return@forEach
-            val itemId = item.id ?: return@forEach
+            val itemId = item.id?.toString() ?: return@forEach
             val emf    = meta.emfAttributes
-            val thumb  = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: showPoster
-
-            // Individual episode inside a bundle
-            val epNum   = meta.episodeNumber
+            val thumb  = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: bundlePoster
+            val epNum  = meta.episodeNumber
             val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
                 ?: "Ep $epNum"
 
             episodes.add(newEpisode("PLAY::$itemId") {
                 this.name        = epTitle
                 this.episode     = epNum
+                this.season      = meta.season?.toIntOrNull()
                 this.posterUrl   = thumb
                 this.description = meta.longDescription
                 this.runTime     = meta.duration?.div(60)
             })
         }
-        return episodes
+
+        return newTvSeriesLoadResponse(bundleTitle, bundleId, TvType.TvSeries, episodes) {
+            this.posterUrl = bundlePoster
+        }
     }
 
     private suspend fun loadMovie(mid: String): MovieLoadResponse? {
-        val url  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/DETAIL/$mid?kids_safe=false&from=0&to=1"
+        val url  = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/DETAIL/$mid?kids_safe=false&from=0&to=1"
         val resp = app.get(url, headers = buildHeaders())
         val data = parseJson<SonyResponse>(resp.text)
 
