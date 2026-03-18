@@ -297,8 +297,10 @@ class SonyLivProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         ensureInit()
+        // CloudStream prepends mainUrl to the data string — strip it back
+        val data = url.removePrefix(mainUrl).removePrefix("/")
         // Data format: "KIND::id[::extra]"
-        val parts = url.split("::")
+        val parts = data.split("::")
         if (parts.isEmpty()) return null
 
         val kind = parts[0]
@@ -508,12 +510,10 @@ class SonyLivProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         ensureInit()
-        val parts  = data.split("::")
-        // For PLAY::vid entries go straight to stream
-        // For SHOW::sid entries we need to drill into loadShow first — but
-        // loadLinks is only called on playable episodes so this should always be PLAY
+        val cleanData = data.removePrefix(mainUrl).removePrefix("/")
+        val parts  = cleanData.split("::")
         val vid    = parts.getOrElse(1) { parts[0] }
-        val isLive = data.contains("LIVE", ignoreCase = true)
+        val isLive = cleanData.contains("LIVE", ignoreCase = true)
 
         val streamUrl = if (isLive) getLiveUrl(vid) else getVodUrl(vid)
         if (streamUrl.isNullOrEmpty()) return false
