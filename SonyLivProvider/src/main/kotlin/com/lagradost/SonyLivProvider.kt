@@ -3,11 +3,7 @@ package com.lagradost
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
-import com.lagradost.cloudstream3.utils.AppUtils.toJson
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.fasterxml.jackson.annotation.JsonProperty
-import okhttp3.Interceptor
-import okhttp3.Response
 import java.util.UUID
 
 // ─── Data classes mirroring the SonyLiv API JSON ────────────────────────────
@@ -114,8 +110,6 @@ class SonyLivProvider : MainAPI() {
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
     override var lang = "hi"          // Primary language is Hindi/Indian content
     override val hasMainPage = true
-    override val hasSearch = true
-    override val hasChromecastSupport = true
 
     private val apiBase = "https://apiv2.sonyliv.com"
     private val appVersion = "3.5.8"
@@ -334,20 +328,18 @@ class SonyLivProvider : MainAPI() {
 
             when (stype) {
                 "MOVIE", "SPORTS_CLIPS", "EPISODE", "HIGHLIGHTS" -> {
-                    episodes.add(Episode(
-                        data  = "$sid||$itemTotal|MOVIE",
-                        name  = epTitle,
-                        posterUrl = epPoster,
-                        description = meta.longDescription,
-                    ))
+                    episodes.add(newEpisode("$sid||$itemTotal|MOVIE") {
+                        this.name        = epTitle
+                        this.posterUrl   = epPoster
+                        this.description = meta.longDescription
+                    })
                 }
                 else -> {
                     // It's a TV show — link to seasons
-                    episodes.add(Episode(
-                        data  = "$sid|$stype|$itemTotal|SHOW",
-                        name  = epTitle,
-                        posterUrl = epPoster,
-                    ))
+                    episodes.add(newEpisode("$sid|$stype|$itemTotal|SHOW") {
+                        this.name      = epTitle
+                        this.posterUrl = epPoster
+                    })
                 }
             }
         }
@@ -390,21 +382,19 @@ class SonyLivProvider : MainAPI() {
 
             if (subtype == "EPISODE") {
                 val epName = "$stitle Episode ${meta.episodeNumber}"
-                episodes.add(Episode(
-                    data    = "$itemSid||$epCount|EPISODE",
-                    name    = epName,
-                    episode = meta.episodeNumber,
-                    posterUrl = epPoster,
-                    description = meta.longDescription,
-                    runTime = meta.duration?.div(60),
-                ))
+                episodes.add(newEpisode("$itemSid||$epCount|EPISODE") {
+                    this.name        = epName
+                    this.episode     = meta.episodeNumber
+                    this.posterUrl   = epPoster
+                    this.description = meta.longDescription
+                    this.runTime     = meta.duration?.div(60)
+                })
             } else {
                 // Season node — link through to episode list
-                episodes.add(Episode(
-                    data  = "$itemSid||$epCount|SEASON",
-                    name  = stitle,
-                    posterUrl = epPoster,
-                ))
+                episodes.add(newEpisode("$itemSid||$epCount|SEASON") {
+                    this.name      = stitle
+                    this.posterUrl = epPoster
+                })
             }
         }
 
@@ -447,12 +437,11 @@ class SonyLivProvider : MainAPI() {
             val title = meta.episodeTitle?.takeIf { it.isNotBlank() } ?: meta.title ?: return@mapNotNull null
             val mid   = item.id ?: return@mapNotNull null
             val emf   = meta.emfAttributes
-            Episode(
-                data      = "$mid||$total|PLAY_MOVIE",
-                name      = title,
-                posterUrl = emf?.portraitThumb ?: emf?.thumbnail ?: "",
-                description = meta.longDescription,
-            )
+            newEpisode("$mid||$total|PLAY_MOVIE") {
+                this.name        = title
+                this.posterUrl   = emf?.portraitThumb ?: emf?.thumbnail ?: ""
+                this.description = meta.longDescription
+            }
         }
 
         val first = items.firstOrNull()?.metadata
@@ -477,35 +466,38 @@ class SonyLivProvider : MainAPI() {
         val isLive = parts.getOrNull(3) == "LIVE"
 
         val streamUrl = if (isLive) getLiveUrl(vid) else getVodUrl(vid)
-            ?: return false
+        if (streamUrl.isNullOrEmpty()) return false
 
+        val url = streamUrl  // smart-cast to non-null
         val quality = when {
-            streamUrl.contains("4k", ignoreCase = true) -> Qualities.P2160
-            streamUrl.contains("1080", ignoreCase = true) -> Qualities.P1080
-            streamUrl.contains("720", ignoreCase = true) -> Qualities.P720
-            else -> Qualities.Unknown
+            url.contains("4k", ignoreCase = true)   -> Qualities.P2160.value
+            url.contains("1080", ignoreCase = true) -> Qualities.P1080.value
+            url.contains("720", ignoreCase = true)  -> Qualities.P720.value
+            else                                     -> Qualities.Unknown.value
         }
 
         val type = when {
-            streamUrl.contains(".mpd") -> ExtractorLinkType.DASH
-            streamUrl.contains(".m3u8") || streamUrl.contains("hls") -> ExtractorLinkType.M3U8
-            else -> ExtractorLinkType.M3U8
+            url.contains(".mpd")                          -> ExtractorLinkType.DASH
+            url.contains(".m3u8") || url.contains("hls") -> ExtractorLinkType.M3U8
+            else                                          -> ExtractorLinkType.M3U8
         }
 
+        val linkHeaders = mapOf(
+            "User-Agent"             to "Mozilla/5.0 (Linux; Android 7.1.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+            "Referer"                to "https://www.sonyliv.com/",
+            "x-playback-session-id" to sessionId,
+        )
+
         callback.invoke(
-            newExtractorLink(
+            ExtractorLink(
                 source  = name,
                 name    = name,
-                url     = streamUrl,
+                url     = url,
+                referer = "https://www.sonyliv.com/",
+                quality = quality,
+                headers = linkHeaders,
                 type    = type,
-            ) {
-                this.quality = quality.value
-                this.headers = mapOf(
-                    "User-Agent" to "Mozilla/5.0 (Linux; Android 7.1.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-                    "Referer"   to "https://www.sonyliv.com/",
-                    "x-playback-session-id" to sessionId,
-                )
-            }
+            )
         )
         return true
     }
