@@ -4,7 +4,41 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.core.JsonToken
+import com.fasterxml.jackson.databind.DeserializationContext
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer
+import com.fasterxml.jackson.databind.ObjectMapper
 import java.util.UUID
+
+// ─── Flexible list deserializer ──────────────────────────────────────────────
+//
+// SonyLIV sometimes returns a JSON object {} instead of an array [] for
+// "containers" fields. This deserializer handles both transparently.
+
+class FlexibleContainerListDeserializer :
+    StdDeserializer<List<SonyContainer>>(List::class.java) {
+
+    override fun deserialize(p: JsonParser, ctxt: DeserializationContext): List<SonyContainer> {
+        return when (p.currentToken) {
+            JsonToken.START_ARRAY -> {
+                val mapper = p.codec as ObjectMapper
+                val type = mapper.typeFactory.constructCollectionType(
+                    List::class.java, SonyContainer::class.java
+                )
+                mapper.readValue(p, type)
+            }
+            JsonToken.START_OBJECT -> {
+                // Single object — wrap in a list
+                val mapper = p.codec as ObjectMapper
+                listOf(mapper.readValue(p, SonyContainer::class.java))
+            }
+            JsonToken.VALUE_NULL -> emptyList()
+            else -> emptyList()
+        }
+    }
+}
 
 // ─── Data classes mirroring the SonyLiv API JSON ────────────────────────────
 
@@ -47,6 +81,7 @@ data class SonyAction(
 
 data class SonyAssets(
     @JsonProperty("total") val total: Int? = null,
+    @JsonDeserialize(using = FlexibleContainerListDeserializer::class)
     @JsonProperty("containers") val containers: List<SonyContainer>? = null,
 )
 
@@ -55,6 +90,7 @@ data class SonyContainer(
     @JsonProperty("metadata") val metadata: SonyMetadata? = null,
     @JsonProperty("actions") val actions: List<SonyAction>? = null,
     @JsonProperty("assets") val assets: SonyAssets? = null,
+    @JsonDeserialize(using = FlexibleContainerListDeserializer::class)
     @JsonProperty("containers") val containers: List<SonyContainer>? = null,
     @JsonProperty("retrieveItems") val retrieveItems: SonyRetrieveItems? = null,
     @JsonProperty("episodeCount") val episodeCount: Int? = null,
@@ -65,6 +101,7 @@ data class SonyRetrieveItems(
 )
 
 data class SonyResultObj(
+    @JsonDeserialize(using = FlexibleContainerListDeserializer::class)
     @JsonProperty("containers") val containers: List<SonyContainer>? = null,
     @JsonProperty("videoURL") val videoURL: String? = null,
     @JsonProperty("isEncrypted") val isEncrypted: Boolean? = null,
