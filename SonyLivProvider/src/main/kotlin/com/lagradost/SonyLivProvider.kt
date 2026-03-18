@@ -484,13 +484,14 @@ class SonyLivProvider : MainAPI() {
 
         callback.invoke(
             newExtractorLink(
-                source  = name,
-                name    = name,
-                url     = url,
-                referer = "https://www.sonyliv.com/",
-                quality = quality,
-                isM3u8  = type == ExtractorLinkType.M3U8,
-            )
+    source = name,
+    name   = name,
+    url    = url,
+) {
+    this.referer = "https://www.sonyliv.com/"
+    this.quality = quality
+    this.type    = type    // ExtractorLinkType.M3U8 or .DASH
+}
         )
         return true
     }
