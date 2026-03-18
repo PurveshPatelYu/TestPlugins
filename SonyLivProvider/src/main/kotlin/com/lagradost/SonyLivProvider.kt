@@ -87,6 +87,7 @@ data class SonyAssets(
 
 data class SonyContainer(
     @JsonProperty("id") val id: String? = null,
+    @JsonProperty("title") val title: String? = null,
     @JsonProperty("metadata") val metadata: SonyMetadata? = null,
     @JsonProperty("actions") val actions: List<SonyAction>? = null,
     @JsonProperty("assets") val assets: SonyAssets? = null,
@@ -221,25 +222,23 @@ class SonyLivProvider : MainAPI() {
     }
 
     private suspend fun getChannelItems(topId: String, pages: Int): List<SearchResponse> {
-        val url = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/PAGE/$topId" +
-                "?kids_safe=true&from=02&to=$pages"
+        val url = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/PAGE-V2/$topId" +
+                "?kids_safe=false&from=0&to=14"
         val resp = app.get(url, headers = buildHeaders())
         val data = parseJson<SonyResponse>(resp.text)
         val results = mutableListOf<SearchResponse>()
 
-        data.resultObj?.containers?.forEach { container ->
-            val label = container.metadata?.label ?: return@forEach
-            val total = container.assets?.total ?: return@forEach
+        // v2 PAGE response: resultObj.containers = [{ id, metadata, retrieveItems, assets:{total, containers:[...shows...]} }]
+        data.resultObj?.containers?.forEach { tray ->
+            val label = tray.metadata?.label ?: tray.title ?: return@forEach
+            val total = tray.assets?.total ?: return@forEach
             if (total == 0) return@forEach
-            val cid   = container.metadata.id ?: return@forEach
-            val stype = data.resultObj.metadata?.pageId ?: ""
-            val thumb = container.metadata.emfAttributes?.portraitThumb
-                ?: container.metadata.emfAttributes?.thumbnail ?: ""
+            val cid   = tray.id ?: tray.metadata?.id ?: return@forEach
+            val thumb = tray.assets?.containers?.firstOrNull()?.metadata?.emfAttributes
+                ?.let { it.portraitThumb ?: it.thumbnail } ?: ""
 
-            // Data format: "KIND::cid::stype::total"
-            // Using :: as separator — safe since SonyLIV IDs never contain ::
             results.add(
-                newMovieSearchResponse(label, "CHANNEL::$cid::$stype::$total", TvType.Movie) {
+                newMovieSearchResponse(label, "CHANNEL::$cid:::$total", TvType.Movie) {
                     this.posterUrl = thumb
                 }
             )
@@ -305,7 +304,7 @@ class SonyLivProvider : MainAPI() {
         val extra = parts.getOrElse(3) { "" }
 
         return when (kind) {
-            "CHANNEL" -> loadChannel(id, stype, extra.toIntOrNull() ?: 100)
+            "CHANNEL" -> loadShowContainer(id)
             "SHOW"    -> loadShow(id)
             "MOVIE"   -> loadMovie(id)
             "PLAY"    -> null  // handled by loadLinks, not load()
@@ -313,69 +312,77 @@ class SonyLivProvider : MainAPI() {
         }
     }
 
-    /** A channel listing — resolve the show list under it */
-    private suspend fun loadChannel(cid: String, stype: String, total: Int): LoadResponse? {
-        // If it's a movie/video type, fetch items directly
-        if (stype in listOf("CLIP", "BEHIND_THE_SCENES", "movies", "channels", "LIVE_SPORT", "HIGHLIGHTS")) {
-            return loadVideoList(cid, "", total)
-        }
-        // Otherwise it's a TV show container
-        return loadShowContainer(cid)
-    }
-
     private suspend fun loadShowContainer(cid: String): LoadResponse? {
-        val url = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/PAGE/$cid?kids_safe=false"
+        // Use the v2 PAGE endpoint that the web app actually uses
+        val url = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/PAGE-V2/$cid?kids_safe=false&from=0&to=14"
         val resp = app.get(url, headers = buildHeaders())
         val data = parseJson<SonyResponse>(resp.text)
         val first = data.resultObj?.containers?.firstOrNull() ?: return null
 
         val showUri   = first.retrieveItems?.uri ?: return null
-        val showTotal = first.assets?.total ?: 9
+        val showTotal = first.assets?.total ?: 14
 
-        // Reuse loadShowList to get the episodes
-        return loadShowList(showUri, 0, showTotal)
+        return loadShowList(showUri, 0, showTotal, first)
     }
 
-    private suspend fun loadShowList(mainUri: String, page: Int, total: Int): TvSeriesLoadResponse? {
-        val from = page * 10
-        val to   = minOf(from + 9, total)
-        val url  = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/$mainUri&kids_safe=false&from=$from&to=$to"
+    private suspend fun loadShowList(
+        mainUri: String,
+        page: Int,
+        total: Int,
+        parentContainer: SonyContainer? = null
+    ): TvSeriesLoadResponse? {
+        val from = page * 14
+        val to   = minOf(from + 13, total)
+        // The retrieveItems URI looks like: /TRAY/EXTCOLLECTION/380487123?...
+        // We prepend the base API path
+        val url = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH$mainUri&kids_safe=false&from=$from&to=$to"
         val resp = app.get(url, headers = buildHeaders())
         val data = parseJson<SonyResponse>(resp.text)
 
         val episodes = mutableListOf<Episode>()
-        var title    = "SonyLIV"
+        var title    = parentContainer?.metadata?.label ?: "SonyLIV"
         var plot     = ""
-        var poster   = ""
+        var poster   = parentContainer?.metadata?.emfAttributes?.portraitThumb ?: ""
 
-        data.resultObj?.containers?.forEachIndexed { idx, item ->
-            val meta  = item.metadata ?: return@forEachIndexed
-            val stype = meta.objectSubtype ?: ""
-            val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() } ?: meta.title ?: ""
-            val sid   = item.id ?: return@forEachIndexed
-            val uri   = item.actions?.firstOrNull()?.uri ?: ""
-            val emf   = meta.emfAttributes
-
-            if (idx == 0) {
-                title  = epTitle
-                plot   = meta.longDescription ?: ""
-                poster = emf?.portraitThumb ?: emf?.mastheadBackground ?: ""
+        // Items are inside resultObj.containers[0].assets.containers (v2 tray response)
+        // OR directly in resultObj.containers (v1 tray response)
+        val items = data.resultObj?.containers?.firstOrNull()?.assets?.containers
+            ?: data.resultObj?.containers
+            ?: return newTvSeriesLoadResponse(title, mainUri, TvType.TvSeries, episodes) {
+                this.posterUrl = poster
             }
 
-            val epPoster = emf?.portraitThumb ?: emf?.landscapeThumb ?: ""
-            val itemTotal = item.assets?.total ?: 100
+        items.forEachIndexed { idx, item ->
+            val meta    = item.metadata ?: return@forEachIndexed
+            val stype   = meta.objectSubtype ?: meta.contentSubtype ?: ""
+            val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() } ?: meta.title ?: ""
+            val sid     = item.id?.toString() ?: return@forEachIndexed
+            val emf     = meta.emfAttributes
+
+            if (idx == 0 && plot.isEmpty()) {
+                plot   = meta.longDescription ?: ""
+                if (poster.isEmpty()) poster = emf?.portraitThumb ?: emf?.landscapeThumb ?: ""
+            }
+
+            val epPoster = emf?.portraitThumb ?: emf?.landscapeThumb ?: emf?.thumbnail ?: ""
 
             when (stype) {
-                "MOVIE", "SPORTS_CLIPS", "EPISODE", "HIGHLIGHTS" -> {
+                "MOVIE", "SPORTS_CLIPS", "HIGHLIGHTS" -> {
                     episodes.add(newEpisode("PLAY::$sid") {
                         this.name        = epTitle
                         this.posterUrl   = epPoster
                         this.description = meta.longDescription
                     })
                 }
+                "SHOW", "EPISODE" -> {
+                    // SHOW = TV series, drill into it
+                    episodes.add(newEpisode("SHOW::$sid::") {
+                        this.name      = epTitle
+                        this.posterUrl = epPoster
+                    })
+                }
                 else -> {
-                    // It's a TV show — link to seasons
-                    episodes.add(newEpisode("SHOW::$sid::$stype::") {
+                    episodes.add(newEpisode("SHOW::$sid::") {
                         this.name      = epTitle
                         this.posterUrl = epPoster
                     })
@@ -391,7 +398,7 @@ class SonyLivProvider : MainAPI() {
 
     private suspend fun loadShow(sid: String): LoadResponse? {
         // Fetch season/episode breakdown
-        val url = "$apiBase/AGL/2.6/R/ENG/WEB/IN/$stateCode/DETAIL/$sid?kids_safe=false&from=0&to=9"
+        val url = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/DETAIL/$sid?kids_safe=false&from=0&to=14"
         val resp = app.get(url, headers = buildHeaders())
         val data = parseJson<SonyResponse>(resp.text)
 
