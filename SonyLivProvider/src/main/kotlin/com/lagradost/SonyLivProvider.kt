@@ -405,12 +405,12 @@ class SonyLivProvider : MainAPI() {
                     val bundleMetaResp = app.get(bundleMetaUrl, headers = buildHeaders())
                     val bundleMetaData = parseJson<SonyResponse>(bundleMetaResp.text)
                     val bundleContainer = bundleMetaData.resultObj?.containers?.firstOrNull()
-                    val items = bundleContainer.containers ?: emptyList()
+                    val items = bundleContainer?.containers ?: emptyList()
                     items.forEach { item ->
                         val meta    = item.metadata ?: return@forEach
                         val itemId  = item.idStr() ?: return@forEach
                         val emf     = meta.emfAttributes
-                        val thumb   = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: bundlePoster
+                        val thumb   = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: bundleThumb
                         val epNum   = meta.episodeNumber
                         val epTitle = meta.episodeTitle?.takeIf { it.isNotBlank() }
                             ?: meta.title?.takeIf { it.isNotBlank() }
@@ -419,7 +419,7 @@ class SonyLivProvider : MainAPI() {
                         episodes.add(newEpisode("PLAY::$itemId") {
                             this.name        = epTitle
                             this.episode     = epNum
-                            this.season      = bundleSeason
+                            this.season      = seasonNum
                             this.posterUrl   = thumb
                             this.description = meta.longDescription
                             this.runTime     = meta.duration?.div(60)
