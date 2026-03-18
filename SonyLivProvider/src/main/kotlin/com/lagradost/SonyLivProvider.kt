@@ -375,7 +375,7 @@ class SonyLivProvider : MainAPI() {
                 }
                 else -> {
                     // It's a TV show — link to seasons
-                    episodes.add(newEpisode("SHOW::$sid::$stype::")) {
+                    episodes.add(newEpisode("SHOW::$sid::$stype::") {
                         this.name      = epTitle
                         this.posterUrl = epPoster
                     })
