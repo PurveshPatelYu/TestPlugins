@@ -84,7 +84,7 @@ data class SonyAssets(
 )
 
 data class SonyContainer(
-    @JsonProperty("id") val id: String? = null,
+    @JsonProperty("id") val id: Any? = null,  // API returns both String and Int IDs
     @JsonProperty("title") val title: String? = null,
     @JsonProperty("metadata") val metadata: SonyMetadata? = null,
     @JsonProperty("actions") val actions: List<SonyAction>? = null,
@@ -196,6 +196,9 @@ class SonyLivProvider : MainAPI() {
     /** Strip mainUrl prefix that CloudStream prepends to all data strings. */
     private fun String.clean() = removePrefix(mainUrl).removePrefix("/")
 
+    /** Safely get container ID as String regardless of whether API returned Int or String. */
+    private fun SonyContainer.idStr() = id?.toString()
+
     private fun SonyContainer.bestThumb() =
         metadata?.emfAttributes?.let {
             it.portraitThumb ?: it.thumbnail ?: it.landscapeThumb
@@ -264,7 +267,7 @@ class SonyLivProvider : MainAPI() {
         items.forEach { item ->
             val meta   = item.metadata ?: return@forEach
             val title  = meta.title?.takeIf { it.isNotBlank() } ?: return@forEach
-            val sid    = item.id?.toString() ?: return@forEach
+            val sid    = item.idStr() ?: return@forEach
             val thumb  = item.bestThumb()
             val stype  = meta.objectSubtype ?: meta.contentSubtype ?: ""
 
@@ -306,7 +309,7 @@ class SonyLivProvider : MainAPI() {
             section.containers?.forEach { item ->
                 val meta  = item.metadata ?: return@forEach
                 val title = meta.title?.takeIf { it.isNotBlank() } ?: return@forEach
-                val sid   = item.id ?: return@forEach
+                val sid   = item.idStr() ?: return@forEach
                 val thumb = item.bestThumb()
                 val stype = meta.objectSubtype ?: ""
 
@@ -384,24 +387,21 @@ class SonyLivProvider : MainAPI() {
 
         when {
             // ── Type 1: GROUP_OF_BUNDLES (TMKOC-style, 100s of episodes in range buckets)
+            // The DETAIL response already contains the bundle list in
+            // containers[0].containers[] — each has layout="BUNDLE_ITEM",
+            // contentSubtype="EPISODE_RANGE", and its own bundle ID (NOT the show ID).
             objectType == "GROUP_OF_BUNDLES" -> {
-                // Fetch the list of EPISODE_RANGE bundles for this show
-                val bundleListUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$sid?from=0&to=50&kids_safe=false"
-                val bundleListResp = app.get(bundleListUrl, headers = buildHeaders())
-                val bundleListData = parseJson<SonyResponse>(bundleListResp.text)
-
-                // Each container is a bundle like { id, metadata.title="4601-4700", metadata.season="47" }
-                val bundles = bundleListData.resultObj?.containers ?: emptyList()
+                val bundles = showContainer.containers ?: emptyList()
 
                 bundles.forEach { bundle ->
-                    val bundleId     = bundle.id?.toString() ?: return@forEach
-                    val bundleTitle  = bundle.metadata?.title ?: bundleId   // e.g. "4601-4700"
-                    val seasonNum    = bundle.metadata?.season?.toIntOrNull()
-                    val bundleThumb  = bundle.metadata?.emfAttributes?.let {
+                    // Bundle id is e.g. 1590014677 — NOT the show id
+                    val bundleId    = bundle.idStr() ?: return@forEach
+                    val bundleTitle = bundle.metadata?.title ?: bundleId  // e.g. "4601-4700"
+                    val seasonNum   = bundle.metadata?.season?.toIntOrNull()
+                    val bundleThumb = bundle.metadata?.emfAttributes?.let {
                         it.portraitThumb ?: it.thumbnail ?: it.landscapeThumb
                     } ?: showPoster
 
-                    // Show each bundle as a "season" row the user can tap to get its episodes
                     episodes.add(newEpisode("BUNDLE::$bundleId") {
                         this.name      = bundleTitle
                         this.season    = seasonNum
@@ -416,7 +416,7 @@ class SonyLivProvider : MainAPI() {
                 children.forEach { item ->
                     val meta    = item.metadata ?: return@forEach
                     val subtype = meta.contentSubtype ?: meta.objectSubtype ?: ""
-                    val itemId  = item.id?.toString() ?: return@forEach
+                    val itemId  = item.idStr() ?: return@forEach
                     val emf     = meta.emfAttributes
                     val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: showPoster
 
@@ -495,7 +495,7 @@ class SonyLivProvider : MainAPI() {
 
         items.forEach { item ->
             val meta   = item.metadata ?: return@forEach
-            val itemId = item.id?.toString() ?: return@forEach
+            val itemId = item.idStr() ?: return@forEach
             val emf    = meta.emfAttributes
             val thumb  = emf?.let { it.portraitThumb ?: it.landscapeThumb ?: it.thumbnail } ?: bundlePoster
             val epNum  = meta.episodeNumber
