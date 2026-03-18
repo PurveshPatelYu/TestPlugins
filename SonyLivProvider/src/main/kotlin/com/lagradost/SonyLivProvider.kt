@@ -404,7 +404,8 @@ class SonyLivProvider : MainAPI() {
                     val bundleMetaUrl  = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$bundleId?from=0&to=100&orderBy=episodeNumber&sortOrder=desc&kids_safe=false"
                     val bundleMetaResp = app.get(bundleMetaUrl, headers = buildHeaders())
                     val bundleMetaData = parseJson<SonyResponse>(bundleMetaResp.text)
-                    val items = bundleMetaData.resultObj?.containers.containers ?: emptyList()
+                    val bundleContainer = bundleMetaData.resultObj?.containers?.firstOrNull()
+                    val items = bundleContainer.containers ?: emptyList()
                     items.forEach { item ->
                         val meta    = item.metadata ?: return@forEach
                         val itemId  = item.idStr() ?: return@forEach
