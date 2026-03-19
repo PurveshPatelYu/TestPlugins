@@ -385,10 +385,9 @@ class SonyLivProvider : MainAPI() {
                 bundles.forEach { bundle ->
                     // Bundle id is e.g. 1590014677 — NOT the show id
                     val bundleId    = bundle.idStr() ?: return@forEach
-                    val jsonurl="https://raw.githubusercontent.com/PurveshPatelYu/TestPlugins/refs/heads/master/SonyLivProvider"
-
+                    val tkmocjsonurl="https://raw.githubusercontent.com/PurveshPatelYu/TestPlugins/refs/heads/master/SonyLivProvider"
                     if (bundleId == "1500000212") {
-            val jsonUrl = "$jsonurl/1500000212.json"
+            val jsonUrl = "$tkmocjsonurl/1500000212.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -402,11 +401,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000269") {
-            val jsonUrl = "$jsonurl/1500000269.json"
+            val jsonUrl = "$tkmocjsonurl/1500000269.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -420,11 +419,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000270") {
-            val jsonUrl = "$jsonurl/1500000270.json"
+            val jsonUrl = "$tkmocjsonurl/1500000270.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -438,11 +437,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000279") {
-            val jsonUrl = "$jsonurl/1500000279.json"
+            val jsonUrl = "$tkmocjsonurl/1500000279.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -456,11 +455,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000281") {
-            val jsonUrl = "$jsonurl/1500000281.json"
+            val jsonUrl = "$tkmocjsonurl/1500000281.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -474,11 +473,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000282") {
-            val jsonUrl = "$jsonurl/1500000282.json"
+            val jsonUrl = "$tkmocjsonurl/1500000282.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -492,11 +491,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000535") {
-            val jsonUrl = "$jsonurl/1500000535.json"
+            val jsonUrl = "$tkmocjsonurl/1500000535.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -510,11 +509,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000536") {
-            val jsonUrl = "$jsonurl/1500000536.json"
+            val jsonUrl = "$tkmocjsonurl/1500000536.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -528,11 +527,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000537") {
-            val jsonUrl = "$jsonurl/1500000537.json"
+            val jsonUrl = "$tkmocjsonurl/1500000537.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -546,11 +545,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000538") {
-            val jsonUrl = "$jsonurl/1500000538.json"
+            val jsonUrl = "$tkmocjsonurl/1500000538.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -564,11 +563,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000539") {
-            val jsonUrl = "$jsonurl/1500000539.json"
+            val jsonUrl = "$tkmocjsonurl/1500000539.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -582,11 +581,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000540") {
-            val jsonUrl = "$jsonurl/1500000540.json"
+            val jsonUrl = "$tkmocjsonurl/1500000540.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -600,11 +599,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000541") {
-            val jsonUrl = "$jsonurl/1500000541.json"
+            val jsonUrl = "$tkmocjsonurl/1500000541.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -618,11 +617,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000284") {
-            val jsonUrl = "$jsonurl/1500000284.json"
+            val jsonUrl = "$tkmocjsonurl/1500000284.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -636,11 +635,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000662") {
-            val jsonUrl = "$jsonurl/1500000662.json"
+            val jsonUrl = "$tkmocjsonurl/1500000662.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -654,11 +653,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000663") {
-            val jsonUrl = "$jsonurl/1500000663.json"
+            val jsonUrl = "$tkmocjsonurl/1500000663.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -672,11 +671,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000664") {
-            val jsonUrl = "$jsonurl/1500000664.json"
+            val jsonUrl = "$tkmocjsonurl/1500000664.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -690,11 +689,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000286") {
-            val jsonUrl = "$jsonurl/1500000286.json"
+            val jsonUrl = "$tkmocjsonurl/1500000286.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -708,11 +707,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000287") {
-            val jsonUrl = "$jsonurl/1500000287.json"
+            val jsonUrl = "$tkmocjsonurl/1500000287.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -726,11 +725,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000288") {
-            val jsonUrl = "$jsonurl/1500000288.json"
+            val jsonUrl = "$tkmocjsonurl/1500000288.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -744,11 +743,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000289") {
-            val jsonUrl = "$jsonurl/1500000289.json"
+            val jsonUrl = "$tkmocjsonurl/1500000289.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -762,11 +761,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000210") {
-            val jsonUrl = "$jsonurl/1500000210.json"
+            val jsonUrl = "$tkmocjsonurl/1500000210.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -780,11 +779,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000542") {
-            val jsonUrl = "$jsonurl/1500000542.json"
+            val jsonUrl = "$tkmocjsonurl/1500000542.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -798,11 +797,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000290") {
-            val jsonUrl = "$jsonurl/1500000290.json"
+            val jsonUrl = "$tkmocjsonurl/1500000290.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -816,11 +815,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000291") {
-            val jsonUrl = "$jsonurl/1500000291.json"
+            val jsonUrl = "$tkmocjsonurl/1500000291.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -834,11 +833,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000292") {
-            val jsonUrl = "$jsonurl/1500000292.json"
+            val jsonUrl = "$tkmocjsonurl/1500000292.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -852,11 +851,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000293") {
-            val jsonUrl = "$jsonurl/1500000293.json"
+            val jsonUrl = "$tkmocjsonurl/1500000293.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -870,11 +869,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000294") {
-            val jsonUrl = "$jsonurl/1500000294.json"
+            val jsonUrl = "$tkmocjsonurl/1500000294.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -888,11 +887,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000295") {
-            val jsonUrl = "$jsonurl/1500000295.json"
+            val jsonUrl = "$tkmocjsonurl/1500000295.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -906,11 +905,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500000296") {
-            val jsonUrl = "$jsonurl/1500000296.json"
+            val jsonUrl = "$tkmocjsonurl/1500000296.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -924,11 +923,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500001057") {
-            val jsonUrl = "$jsonurl/1500001057.json"
+            val jsonUrl = "$tkmocjsonurl/1500001057.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -942,11 +941,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500002324") {
-            val jsonUrl = "$jsonurl/1500002324.json"
+            val jsonUrl = "$tkmocjsonurl/1500002324.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -960,11 +959,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500002600") {
-            val jsonUrl = "$jsonurl/1500002600.json"
+            val jsonUrl = "$tkmocjsonurl/1500002600.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -978,11 +977,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500002866") {
-            val jsonUrl = "$jsonurl/1500002866.json"
+            val jsonUrl = "$tkmocjsonurl/1500002866.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -996,11 +995,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500003057") {
-            val jsonUrl = "$jsonurl/1500003057.json"
+            val jsonUrl = "$tkmocjsonurl/1500003057.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1014,11 +1013,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500003247") {
-            val jsonUrl = "$jsonurl/1500003247.json"
+            val jsonUrl = "$tkmocjsonurl/1500003247.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1032,11 +1031,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500003536") {
-            val jsonUrl = "$jsonurl/1500003536.json"
+            val jsonUrl = "$tkmocjsonurl/1500003536.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1050,11 +1049,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500003817") {
-            val jsonUrl = "$jsonurl/1500003817.json"
+            val jsonUrl = "$tkmocjsonurl/1500003817.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1068,11 +1067,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500004046") {
-            val jsonUrl = "$jsonurl/1500004046.json"
+            val jsonUrl = "$tkmocjsonurl/1500004046.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1086,11 +1085,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500005265") {
-            val jsonUrl = "$jsonurl/1500005265.json"
+            val jsonUrl = "$tkmocjsonurl/1500005265.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1104,11 +1103,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500005539") {
-            val jsonUrl = "$jsonurl/1500005539.json"
+            val jsonUrl = "$tkmocjsonurl/1500005539.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1122,11 +1121,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500005836") {
-            val jsonUrl = "$jsonurl/1500005836.json"
+            val jsonUrl = "$tkmocjsonurl/1500005836.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1140,11 +1139,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1500006110") {
-            val jsonUrl = "$jsonurl/1500006110.json"
+            val jsonUrl = "$tkmocjsonurl/1500006110.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1158,11 +1157,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1590013170") {
-            val jsonUrl = "$jsonurl/1590013170.json"
+            val jsonUrl = "$tkmocjsonurl/1590013170.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1176,11 +1175,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1590014343") {
-            val jsonUrl = "$jsonurl/1590014343.json"
+            val jsonUrl = "$tkmocjsonurl/1590014343.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1194,11 +1193,11 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
 
         if (bundleId == "1590014561") {
-            val jsonUrl = "$jsonurl/1590014561.json"
+            val jsonUrl = "$tkmocjsonurl/1590014561.json"
             val rawJson = app.get(jsonUrl).text
             val data = parseJson<List<Map<String, Any>>>(rawJson)
             
@@ -1212,9 +1211,9 @@ class SonyLivProvider : MainAPI() {
                     runTime     = (item["time"] as? Double)?.toInt()
                 })
             }
-            continue@forEach
+            return@forEach
         }
-
+                    
                     val bundleTitle = bundle.metadata?.title ?: bundleId  // e.g. "4601-4700"
                     val seasonNum   = bundle.metadata?.season
                     val bundleThumb = bundle.metadata?.emfAttributes?.let {
