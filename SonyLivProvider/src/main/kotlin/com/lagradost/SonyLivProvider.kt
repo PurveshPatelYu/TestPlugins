@@ -440,8 +440,7 @@ class SonyLivProvider : MainAPI() {
 
 
             else -> {
-                showContainer.forEach { item ->
-                    val meta    = item.metadata ?: return@forEach
+                    val meta    = showContainer.metadata ?: return@forEach
                     val subtype = meta.contentSubtype ?: meta.objectSubtype ?: ""
                     val itemId  = item.idStr() ?: return@forEach
                     val emf     = meta.emfAttributes
@@ -470,7 +469,6 @@ class SonyLivProvider : MainAPI() {
                             })
                         }
                     }
-                }
             }
         }
 
