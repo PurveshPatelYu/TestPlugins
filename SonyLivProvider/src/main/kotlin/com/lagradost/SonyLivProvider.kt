@@ -440,9 +440,9 @@ class SonyLivProvider : MainAPI() {
 
 
             else -> {
-                    val meta    = showContainer.metadata ?: return@forEach
+                    val meta    = showContainer.metadata
                     val subtype = meta.contentSubtype ?: meta.objectSubtype ?: ""
-                    val itemId  = item.idStr() ?: return@forEach
+                    val itemId  = showContainer.idStr()
                     val emf     = meta.emfAttributes
                     val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: showPoster
 
