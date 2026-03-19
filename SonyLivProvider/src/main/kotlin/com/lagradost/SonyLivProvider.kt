@@ -251,7 +251,7 @@ class SonyLivProvider : MainAPI() {
         val results = mutableListOf<SearchResponse>()
 
         // v2 tray: items are in resultObj.containers[0].assets.containers
-        val items = tray?.containers?: return emptyList()
+        val items = tray?.assets?.containers?: return emptyList()
 
         items.forEach { item ->
             val meta   = item.metadata ?: return@forEach
@@ -1213,7 +1213,7 @@ class SonyLivProvider : MainAPI() {
             }
             return@forEach
         }
-        
+
                     val bundleTitle = bundle.metadata?.title ?: bundleId  // e.g. "4601-4700"
                     val seasonNum   = bundle.metadata?.season
                     val bundleThumb = bundle.metadata?.emfAttributes?.let {
