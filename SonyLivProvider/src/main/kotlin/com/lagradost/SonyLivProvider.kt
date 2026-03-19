@@ -404,6 +404,7 @@ class SonyLivProvider : MainAPI() {
                         }
                         return@forEach
                     }
+                    else{
                     val bundleTitle = bundle.metadata?.title ?: bundleId  // e.g. "4601-4700"
                     val seasonNum   = bundle.metadata?.season
                     val bundleThumb = bundle.metadata?.emfAttributes?.let {
@@ -432,6 +433,7 @@ class SonyLivProvider : MainAPI() {
                             this.description = meta.longDescription
                             this.runTime     = meta.duration?.div(60)
                         })
+                    }
                     }
                 }
             }
