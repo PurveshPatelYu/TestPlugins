@@ -440,34 +440,34 @@ class SonyLivProvider : MainAPI() {
 
 
             else -> {
-                    val subtype = showMeta.contentSubtype
-                    val itemId  = showContainer.idStr() 
-                    val emf     = showMeta.emfAttributes
-                    val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: showPoster
+                val subtype = showMeta?.contentSubtype
+                val itemId  = showContainer.idStr()
+                val emf     = showMeta?.emfAttributes
+                val thumb   = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail } ?: showPoster
 
-                    when (subtype) {
-                        "EPISODE" -> {
-                            val epTitle = showMeta.episodeTitle?.takeIf { it.isNotBlank() }
-                                ?: "Ep ${showMeta.episodeNumber}"
-                            episodes.add(newEpisode("PLAY::$itemId") {
-                                this.name        = epTitle
-                                this.episode     = showMeta.episodeNumber
-                                this.season      = showMeta.season
-                                this.posterUrl   = thumb
-                                this.description = showMeta.longDescription
-                                this.runTime     = showMeta.duration?.div(60)
-                            })
-                        }
-                    else -> {
-                            val epTitle = showMeta.episodeTitle?.takeIf { it.isNotBlank() }
-                                ?: showMeta.title ?: showTitle
-                            episodes.add(newEpisode("PLAY::$itemId") {
-                                this.name        = epTitle
-                                this.posterUrl   = thumb
-                                this.description = showMeta.longDescription
-                            })
-                        }
+                when (subtype) {
+                    "EPISODE" -> {
+                        val epTitle = showMeta?.episodeTitle?.takeIf { it.isNotBlank() }
+                            ?: "Ep ${showMeta?.episodeNumber}"
+                        episodes.add(newEpisode("PLAY::$itemId") {
+                            this.name        = epTitle
+                            this.episode     = showMeta?.episodeNumber
+                            this.season      = showMeta?.season
+                            this.posterUrl   = thumb
+                            this.description = showMeta?.longDescription
+                            this.runTime     = showMeta?.duration?.div(60)
+                        })
                     }
+                    else -> {
+                        val epTitle = showMeta?.episodeTitle?.takeIf { it.isNotBlank() }
+                            ?: showMeta?.title ?: showTitle
+                        episodes.add(newEpisode("PLAY::$itemId") {
+                            this.name        = epTitle
+                            this.posterUrl   = thumb
+                            this.description = showMeta?.longDescription
+                        })
+                    }
+                }
             }
         }
 
