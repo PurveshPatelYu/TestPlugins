@@ -63,6 +63,7 @@ data class SonyMetadata(
     @JsonProperty("poster") val poster: String? = null,
     @JsonProperty("emfAttributes") val emfAttributes: SonyEmfAttributes? = null,
     @JsonProperty("contentId") val contentId: Long? = null,
+     @JsonProperty("contentCategory") val contentCategory: Long? = null,
     @JsonProperty("objectType") val objectType: String? = null,
     @JsonProperty("contentType") val contentType: String? = null,
     @JsonProperty("season") val season: Int? = null,
@@ -99,6 +100,7 @@ data class SonyContainer(
     @JsonProperty("editorialMetadata") val editorialMetadata: SonyMetadata? = null,
     @JsonProperty("actions") val actions: List<SonyAction>? = null,
     @JsonProperty("assets") val assets: SonyAssets? = null,
+    @JsonProperty("assets") val acontainers: List<SonyContainer>? = null,
     @JsonDeserialize(using = FlexibleContainerListDeserializer::class)
     @JsonProperty("containers") val containers: List<SonyContainer>? = null,
     @JsonProperty("retrieveItems") val retrieveItems: SonyRetrieveItems? = null,
@@ -343,7 +345,7 @@ override suspend fun search(query: String): List<SearchResponse> {
     val items: List<SonyContainer> = run {
         // Try tab structure first (non-empty search)
         val firstTab = containers.firstOrNull()
-        val tabItems = firstTab?.assets
+        val tabItems = firstTab?.acontainers
         if (!tabItems.isNullOrEmpty()) return@run tabItems
 
         // Fallback: popular search — find the "Popular Searches" container
