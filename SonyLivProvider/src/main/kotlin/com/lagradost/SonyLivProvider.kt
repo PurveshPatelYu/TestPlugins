@@ -291,11 +291,13 @@ class SonyLivProvider : MainAPI() {
     override val mainPage = mainPageOf(
         // TV Shows sub-trays  (page id 7738)
         "31155_24783" to "Latest Episodes",
+        "35211_7935" to "New on Liv",
         "38048_7123"  to "SET Shows",
         "38048_8417"  to "Sony SAB Shows",
         "38048_7131"  to "SET Classics",
         // Movies sub-trays  (page id 7745)
-        "1111_9013870"  to "Movies",
+        "47570_22200"  to "Movies",
+        "47570_22204" to "Liv Movies",
         // Sports
         "39379_24064"  to "Sports",
     )
