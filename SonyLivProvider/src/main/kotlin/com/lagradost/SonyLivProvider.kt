@@ -66,6 +66,7 @@ data class SonyMetadata(
     @JsonProperty("objectType") val objectType: String? = null,
     @JsonProperty("contentType") val contentType: String? = null,
     @JsonProperty("season") val season: Int? = null,
+    @JsonProperty("card_name") val cardName: String? = null,  // ADD
 )
 
 data class SonyEmfAttributes(
@@ -140,7 +141,18 @@ data class SonyULDObj(
     @JsonProperty("state_code") val stateCode: String? = null,
     @JsonProperty("channelPartnerID") val channelPartnerID: String? = null,
 )
+data class SonyLaDetails(
+    @JsonProperty("laURL")   val laURL: String? = null,
+    @JsonProperty("drm")     val drm: String? = null,
+    @JsonProperty("isDummy") val isDummy: Boolean? = null,
+)
 
+// Update SonyResultObj — add LA_Details field:
+data class SonyResultObj(
+    // ... existing fields ...
+    @JsonProperty("LA_Details") val laDetails: SonyLaDetails? = null,
+    @JsonProperty("LA_ID")      val laId: String? = null,
+)
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 class SonyLivProvider : MainAPI() {
@@ -154,7 +166,6 @@ class SonyLivProvider : MainAPI() {
     private val apiBase      = "https://apiv2.sonyliv.com"  // token/ULD/stream endpoints
     private val apiBase3     = "https://apiv3.sonyliv.com"  // detail/bundle/episode endpoints
     private val appVersion   = "3.5.8"
-    private val deviceId     = "9c7631d21edd4a65a92b2b641c8a13a2-1634808345996"
     private val xForwardedFor = "103.250.158.149"
 
     private var securityToken  = ""
@@ -176,7 +187,7 @@ class SonyLivProvider : MainAPI() {
         "X-Via-Device"    to "true",
         "Session_id"      to sessionId,
         "Security_token"  to securityToken,
-        "Device_id"       to deviceId,
+        "Device_id"       to sessionId,
         "X-Forwarded-For" to xForwardedFor,
         "User-Agent"      to "Mozilla/5.0 (Linux; Android 7.1.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
     )
@@ -190,7 +201,9 @@ class SonyLivProvider : MainAPI() {
         stateCode        = uld.first
         channelPartnerID = uld.second
     }
-
+    private suspend fun getdeviceid(): String {
+            return sessionId
+        }
     private suspend fun getToken(): String {
         val resp = app.get("$apiBase/AGL/1.4/A/ENG/WEB/ALL/GETTOKEN", headers = buildHeaders())
         return parseJson<SonyTokenResponse>(resp.text).resultObj ?: ""
@@ -245,93 +258,145 @@ class SonyLivProvider : MainAPI() {
      * Returns SearchResponse items where each item is a show (not an episode).
      */
     private suspend fun fetchTrayShows(trayId: String): List<SearchResponse> {
-        // First resolve the tray's retrieveItems URI via PAGE-V2
-        val pageUrl  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/PAGE-V2/$trayId?kids_safe=false&from=0&to=30"
-        val pageResp = app.get(pageUrl, headers = buildHeaders())
-        val pageData = parseJson<SonyResponse>(pageResp.text)
-
-        val tray    = pageData.resultObj?.containers?.firstOrNull() ?: return emptyList()
-        val results = mutableListOf<SearchResponse>()
-
-        // v2 tray: items are in resultObj.containers[0].assets.containers
-        val items = tray?.assets?.containers?: return emptyList()
-
-        items.forEach { item ->
-            val meta   = item.metadata ?: return@forEach
-            val stype  = meta.objectSubtype ?: meta.contentSubtype ?: ""
-            if (stype=="LAUNCHER"){
-                val emeta = item.editorialMetadata ?: return@forEach
-                val ameta   = item.assetMetadata ?: return@forEach
-                val title  = ameta.title?.takeIf { it.isNotBlank() } ?: return@forEach
-                val mid    = ameta.contentId ?: return@forEach
-                val thumb  = emeta.poster
-                results.add(
-                    newMovieSearchResponse(title, "MOVIE::$mid", TvType.Movie) {
-                        this.posterUrl = thumb
-                    }
-                )
-                return@forEach
-            }
-
-            val title  = meta.title?.takeIf { it.isNotBlank() } ?: return@forEach
-            val sid    = item.idStr() ?: return@forEach
-            val thumb  = item.bestThumb()
-            
-            when (stype) {
-                "SHOW" -> results.add(
-                    newTvSeriesSearchResponse(title, "SHOW::$sid", TvType.TvSeries) {
-                        this.posterUrl = thumb
-                    }
-                )
-                "MOVIE" -> results.add(
-                    newMovieSearchResponse(title, "MOVIE::$sid", TvType.Movie) {
-                        this.posterUrl = thumb
-                    }
-                )
-                else -> results.add(
-                    // Default to TvSeries for unknown subtypes (clips, highlights, etc.)
-                    newTvSeriesSearchResponse(title, "SHOW::$sid", TvType.TvSeries) {
-                        this.posterUrl = thumb
-                    }
-                )
-            }
-        }
-        return results
+    // trayId format: "collectionId_itemId" e.g. "1111_9013870"
+    // Shows use PAGE-V2/{trayId}, movies use EXTCOLLECTION/{itemId}
+    val parts = trayId.split("_")
+    
+    val pageUrl = if (parts.size == 2 && parts[0] == "1111") {
+        // EXTCOLLECTION tray (movies)
+        val collectionId = parts[1]
+        "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/EXTCOLLECTION/$collectionId" +
+            "?layout=portrait_layout&id=$trayId&SSR=false&recoPath=false&isFromDetail=false&isPageV2=true"
+    } else {
+        // PAGE-V2 tray (shows)
+        "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/PAGE-V2/$trayId?kids_safe=false&from=0&to=30"
     }
 
+    val pageResp = app.get(pageUrl, headers = buildHeaders())
+    val pageData = parseJson<SonyResponse>(pageResp.text)
+
+    val results = mutableListOf<SearchResponse>()
+
+    // EXTCOLLECTION: items are directly in resultObj.containers[0].assets.containers
+    // PAGE-V2: same path — resultObj.containers[0].assets.containers
+    val tray  = pageData.resultObj?.containers?.firstOrNull() ?: return emptyList()
+    val items = tray.assets?.containers ?: return emptyList()
+
+    items.forEach { item ->
+        val meta  = item.metadata ?: return@forEach
+        val stype = meta.objectSubtype ?: meta.contentSubtype ?: ""
+
+        if (stype == "LAUNCHER") {
+            // Movies tray: real data is in assetMetadata + editorialMetadata
+            val ameta = item.assetMetadata ?: return@forEach
+            val emeta = item.editorialMetadata ?: return@forEach
+            val title = ameta.title?.takeIf { it.isNotBlank() }
+                ?: emeta.poster  // fallback unlikely needed
+                ?: return@forEach
+            val mid   = ameta.contentId?.toString() ?: return@forEach
+            val thumb = emeta.poster
+            results.add(
+                newMovieSearchResponse(title, "MOVIE::$mid", TvType.Movie) {
+                    this.posterUrl = thumb
+                }
+            )
+            return@forEach
+        }
+
+        // Shows tray: normal path
+        val title = meta.title?.takeIf { it.isNotBlank() } ?: return@forEach
+        val sid   = item.idStr() ?: return@forEach
+        val thumb = item.bestThumb()
+
+        when (stype) {
+            "SHOW", "EPISODIC_SHOW", "GROUP_OF_BUNDLES" -> results.add(
+                newTvSeriesSearchResponse(title, "SHOW::$sid", TvType.TvSeries) {
+                    this.posterUrl = thumb
+                }
+            )
+            "MOVIE", "MOVIE_BUNDLE" -> results.add(
+                newMovieSearchResponse(title, "MOVIE::$sid", TvType.Movie) {
+                    this.posterUrl = thumb
+                }
+            )
+            else -> results.add(
+                newTvSeriesSearchResponse(title, "SHOW::$sid", TvType.TvSeries) {
+                    this.posterUrl = thumb
+                }
+            )
+        }
+    }
+    return results
+}
     // ── Search ────────────────────────────────────────────────────────────────
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        ensureInit()
-        val encoded = query.replace(" ", "+")
-        val url  = "$apiBase/AGL/2.4/A/ENG/WEB/IN/$stateCode/TRAY/SEARCH?query=$encoded&filter_contentSubtype=SHOW,MOVIE,COLLECTION,EPISODIC_SHOW,TOURNAMENT,LIVE_CHANNEL,TOURNAMENT_BUNDLE,SECOND_SCREEN,STAGE&internal=true&from=0&to=20&kids_safe=false"
-        val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.text)
+override suspend fun search(query: String): List<SearchResponse> {
+    ensureInit()
+    val url = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/SEARCH" +
+        "?query=${query.encodeURL()}&from=0&to=20&tabs=1&kids_safe=false"
+    val resp = app.get(url, headers = buildHeaders())
+    val data = parseJson<SonyResponse>(resp.text)
 
-        val results = mutableListOf<SearchResponse>()
-        val containers = data.resultObj?.containers ?: return results
+    val results = mutableListOf<SearchResponse>()
+    val containers = data.resultObj?.containers ?: return results
 
-        containers.forEachIndexed { idx, section ->
-            section.containers?.forEach { item ->
-                val meta  = item.metadata ?: return@forEach
-                val title = meta.title?.takeIf { it.isNotBlank() } ?: return@forEach
-                val sid   = item.idStr() ?: return@forEach
-                val thumb = item.bestThumb()
-                val stype = meta.objectSubtype ?: ""
+    // Case 1: Non-empty query → containers[0] has assets[] (tab view)
+    // Case 2: Empty query    → containers[2] has containers[] (popular searches)
+    val items: List<SonyContainer> = run {
+        // Try tab structure first (non-empty search)
+        val firstTab = containers.firstOrNull()
+        val tabItems = firstTab?.assets
+        if (!tabItems.isNullOrEmpty()) return@run tabItems
 
-                if (idx == 0 || stype == "SHOW") {
-                    results.add(newTvSeriesSearchResponse(title, "SHOW::$sid", TvType.TvSeries) {
+        // Fallback: popular search — find the "Popular Searches" container
+        val popularContainer = containers.find { 
+            it.layout == "popular_search" || it.title == "Popular Searches" 
+        }
+        popularContainer?.containers ?: emptyList()
+    }
+
+    items.forEach { asset ->
+        val id    = asset.idStr() ?: return@forEach
+        val meta  = asset.metadata ?: return@forEach
+        val title = meta.title ?: return@forEach
+        val emf   = meta.emfAttributes
+        val thumb = emf?.portraitThumb ?: emf?.thumbnail ?: emf?.landscapeThumb
+
+        val objType = meta.objectSubtype ?: meta.objectType ?: meta.contentSubtype
+
+        when {
+            // Movies: MOVIE_BUNDLE bundle OR objectType BUNDLE with MOVIE contentCategory
+            objType == "MOVIE_BUNDLE" || 
+            (objType == "BUNDLE" && meta.contentCategory == "MOVIES") -> {
+                results.add(newMovieSearchResponse(title, "MOVIE::$id", TvType.Movie) {
+                    this.posterUrl = thumb
+                })
+            }
+            // Shows: GROUP_OF_BUNDLES shows OR EPISODIC_SHOW bundles
+            objType == "SHOW" || 
+            objType == "EPISODIC_SHOW" || 
+            meta.objectType == "GROUP_OF_BUNDLES" -> {
+                results.add(newTvSeriesSearchResponse(title, "SHOW::$id", TvType.TvSeries) {
+                    this.posterUrl = thumb
+                })
+            }
+            // BUNDLE type — check category to distinguish movie vs show
+            objType == "BUNDLE" -> {
+                if (meta.contentCategory == "TV_SHOW") {
+                    results.add(newTvSeriesSearchResponse(title, "SHOW::$id", TvType.TvSeries) {
                         this.posterUrl = thumb
                     })
                 } else {
-                    results.add(newMovieSearchResponse(title, "MOVIE::$sid", TvType.Movie) {
+                    results.add(newMovieSearchResponse(title, "MOVIE::$id", TvType.Movie) {
                         this.posterUrl = thumb
                     })
                 }
             }
         }
-        return results
     }
+
+    return results
+}
 
     // ── Load ──────────────────────────────────────────────────────────────────
     // Flow:
@@ -560,27 +625,33 @@ class SonyLivProvider : MainAPI() {
         }
     }
 
-    private suspend fun loadMovie(mid: String): MovieLoadResponse? {
-        val url  = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/DETAIL/$mid?kids_safe=false&from=0&to=1"
-        val resp = app.get(url, headers = buildHeaders())
-        val data = parseJson<SonyResponse>(resp.text)
+private suspend fun loadMovie(sid: String): LoadResponse? {
+    ensureInit()
+    val url = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$sid"
+    val resp = app.get(url, headers = buildHeaders())
+    val data = parseJson<SonyResponse>(resp.text)
 
-        val container = data.resultObj?.containers?.firstOrNull() ?: return null
-        val meta      = container.metadata ?: return null
-        val emf       = meta.emfAttributes
-        val title     = meta.title ?: "SonyLIV"
-        val plot      = buildString {
-            append(meta.longDescription ?: "")
-            emf?.castAndCrew?.let { append("\n\n$it") }
-        }
+    val container = data.resultObj?.containers?.firstOrNull() ?: return null
+    val meta = container.metadata ?: return null
+    val emf  = meta.emfAttributes
 
-        return newMovieLoadResponse(title, mid, TvType.Movie, "PLAY::$mid") {
-            this.plot      = plot
-            this.posterUrl = emf?.let { it.portraitThumb ?: it.poster ?: it.thumbnail } ?: ""
-            this.year      = meta.year
-            this.tags      = meta.genres
-        }
+    // The actual playable video ID — from containers inside or from the bundle's own ID
+    // In BUNDLE detail, the first container IS the video item with the real contentId
+    val videoId = container.idStr() ?: sid  // fallback to bundle id itself
+
+    val thumb = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail }
+
+    return newMovieLoadResponse(
+        name    = meta.title ?: return null,
+        url     = "PLAY::$videoId",
+        type    = TvType.Movie,
+        dataUrl = "PLAY::$videoId"
+    ) {
+        this.posterUrl   = thumb
+        this.plot        = meta.longDescription
+        this.year        = meta.year?.toIntOrNull()
     }
+}
 
     // ── Load links ────────────────────────────────────────────────────────────
 
@@ -591,44 +662,68 @@ override suspend fun loadLinks(
     callback: (ExtractorLink) -> Unit
 ): Boolean {
     ensureInit()
-    val clean  = data.clean()
-    val parts  = clean.split("::")
-    val vid    = parts.getOrElse(1) { clean }
+    val clean = data.clean()
+    val parts = clean.split("::")
+    val vid   = parts.getOrElse(1) { clean }
     val isLive = clean.contains("LIVE", ignoreCase = true)
 
-    val result = if (isLive) getLiveResult(vid) else getVodResult(vid)
+    val result    = if (isLive) getLiveResult(vid) else getVodResult(vid)
     val streamUrl = result?.videoURL
     if (streamUrl.isNullOrEmpty()) return false
 
-    // ── Subtitles ──────────────────────────────────────────────────────
+    // Subtitles
     result.subtitle?.forEach { sub ->
         val subUrl  = sub.subtitleUrl ?: return@forEach
         val subName = sub.subtitleDisplayName ?: sub.subtitleLanguageName ?: "Unknown"
         subtitleCallback.invoke(SubtitleFile(subName, subUrl))
     }
 
-    // ── Stream ─────────────────────────────────────────────────────────
     val type = when {
         streamUrl.contains(".mpd") -> ExtractorLinkType.DASH
         else                       -> ExtractorLinkType.M3U8
     }
+
+    // Get Widevine license URL if stream is encrypted
+    val licenseUrl = result.laDetails?.laURL
 
     callback.invoke(
         newExtractorLink(source = name, name = name, url = streamUrl) {
             this.referer = "$mainUrl/"
             this.headers = buildHeaders()
             this.type    = type
+            if (licenseUrl != null) {
+                this.drmConfig = DrmConfig(
+                    KeySystem.WIDEVINE,
+                    licenseUrl,
+                    mapOf("Content-Type" to "application/octet-stream")
+                )
+            }
         }
     )
     return true
 }
 
 private suspend fun getVodResult(vid: String): SonyResultObj? {
+    val body = mapOf(
+        "actionType"       to "play",
+        "browser"          to "Chrome",
+        "deviceId"         to getdeviceid(),
+        "os"               to "Windows",
+        "platform"         to "web",
+        "hasLAURLEnabled"  to true,
+        "adsParams"        to mapOf(
+            "Idtype" to "uuid",
+            "Is_lat" to "0",
+            "ppid"   to null
+        )
+    )
+
     var url  = "$apiBase/AGL/3.0/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
-    var resp = app.get(url, headers = buildHeaders())
+    var resp = app.post(url, headers = buildHeaders(), json = body)
+    
     if (!resp.isSuccessful) {
         url  = "$apiBase/AGL/3.0/SR/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid"
-        resp = app.get(url, headers = buildHeaders())
+        resp = app.post(url, headers = buildHeaders(), json = body)
     }
     if (!resp.isSuccessful) return null
     return parseJson<SonyResponse>(resp.text).resultObj
