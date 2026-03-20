@@ -750,10 +750,10 @@ private suspend fun getLiveResult(vid: String): SonyResultObj? {
 }
 
     private suspend fun getVodUrl(vid: String): String? {
-        var url  = "$apiBase/AGL/3.0/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
+        var url  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
         var resp = app.get(url, headers = buildHeaders())
         if (!resp.isSuccessful) {
-            url  = "$apiBase/AGL/3.0/SR/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid"
+            url  = "$apiBase/AGL/4.8/SR/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid"
             resp = app.get(url, headers = buildHeaders())
         }
         if (!resp.isSuccessful) return null
