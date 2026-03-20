@@ -95,6 +95,7 @@ data class SonyAssets(
 data class SonyContainer(
     @JsonProperty("id") val id: Any? = null,  // API returns both String and Int IDs
     @JsonProperty("title") val title: String? = null,
+    @JsonProperty("layout") val layout: String? = null,
     @JsonProperty("metadata") val metadata: SonyMetadata? = null,
     @JsonProperty("assetMetadata") val assetMetadata: SonyMetadata? = null,
     @JsonProperty("editorialMetadata") val editorialMetadata: SonyMetadata? = null,
@@ -364,10 +365,7 @@ override suspend fun search(query: String): List<SearchResponse> {
 
         val objType = meta.objectSubtype ?: meta.objectType ?: meta.contentSubtype
 
-        when {
-            // Movies: MOVIE_BUNDLE bundle OR objectType BUNDLE with MOVIE contentCategory
-            objType == "MOVIE_BUNDLE" || 
-            (objType == "BUNDLE" && meta.contentCategory == "MOVIES") -> {
+        when {objType == "MOVIE_BUNDLE" || (objType == "BUNDLE" && meta.contentCategory == "MOVIES") -> {
                 results.add(newMovieSearchResponse(title, "MOVIE::$id", TvType.Movie) {
                     this.posterUrl = thumb
                 })
