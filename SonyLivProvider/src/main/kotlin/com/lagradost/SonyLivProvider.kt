@@ -106,7 +106,65 @@ data class SonyContainer(
     @JsonProperty("episodeCount") val episodeCount: Int? = null,
     @JsonProperty("seasonCount") val seasonCount: Int? = null,
 )
+// The top-level search response wrapper
+data class SonySearchResponse(
+    @JsonProperty("resultCode") val resultCode: String? = null,
+    @JsonProperty("resultObj")  val resultObj: SonySearchResultObj? = null,
+)
 
+data class SonySearchResultObj(
+    @JsonProperty("total")      val total: Int? = null,
+    @JsonProperty("containers") val containers: List<SonySearchOuterContainer>? = null,
+)
+
+// containers[0] — the outer shell
+data class SonySearchOuterContainer(
+    @JsonProperty("containers") val containers: List<SonySearchTab>? = null,
+)
+
+// containers[0].containers[0] — the "All" tab (or "Videos" etc.)
+data class SonySearchTab(
+    @JsonProperty("tab")    val tab: String? = null,
+    @JsonProperty("tabKey") val tabKey: String? = null,
+    @JsonProperty("title")  val title: String? = null,
+    @JsonProperty("total")  val total: Int? = null,
+    @JsonProperty("assets") val assets: List<SonySearchAsset>? = null,
+)
+
+// Each item in assets[]
+data class SonySearchAsset(
+    // ID fields — use contentId as the video ID for VOD calls
+    @JsonProperty("id")              val id: Any? = null,
+    @JsonProperty("contentId")       val contentId: Long? = null,
+    @JsonProperty("GGID")            val ggId: Any? = null,          // bundleId for movies
+
+    // Type discriminators — TOP LEVEL, not in metadata
+    @JsonProperty("objectSubtype")   val objectSubtype: String? = null,   // "MOVIE", "SHOW", "EPISODIC_SHOW"
+    @JsonProperty("contentCategory") val contentCategory: String? = null, // "MOVIES", "TV_SHOW", "ORIGINALS", "SPORTS"
+
+    // Display
+    @JsonProperty("title")           val title: String? = null,
+    @JsonProperty("isEncrypted")     val isEncrypted: Boolean? = null,
+    @JsonProperty("isLive")          val isLive: Boolean? = null,
+
+    // Bundle parent — for movies, parents[0].parentId is the MOVIE_BUNDLE id
+    @JsonProperty("parents")         val parents: List<SonySearchParent>? = null,
+
+    // The nested metadata (for thumbnails)
+    @JsonProperty("metadata")        val metadata: SonySearchMetadata? = null,
+)
+
+data class SonySearchParent(
+    @JsonProperty("parentId")      val parentId: Long? = null,
+    @JsonProperty("parentType")    val parentType: String? = null,    // "BUNDLE"
+    @JsonProperty("parentSubType") val parentSubType: String? = null, // "MOVIE_BUNDLE"
+)
+
+data class SonySearchMetadata(
+    @JsonProperty("emfAttributes") val emfAttributes: SonyEmfAttributes? = null,
+    @JsonProperty("objectType")    val objectType: String? = null,
+    @JsonProperty("objectSubtype") val objectSubtype: String? = null,
+)
 data class SonyRetrieveItems(
     @JsonProperty("uri") val uri: String? = null,
 )
@@ -330,64 +388,49 @@ class SonyLivProvider : MainAPI() {
 
 override suspend fun search(query: String): List<SearchResponse> {
     ensureInit()
-    val encoded = query.replace(" ", "+")
     val url = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/SEARCH" +
-        "?query=$encoded&from=0&to=20&tabs=1&kids_safe=false"
+        "?query=${query.encodeURL()}&from=0&to=20&tabs=1&kids_safe=false"
     val resp = app.get(url, headers = buildHeaders())
-    val data = parseJson<SonyResponse>(resp.text)
+    val data = parseJson<SonySearchResponse>(resp.text)
 
     val results = mutableListOf<SearchResponse>()
-    val containers = data.resultObj?.containers ?: return results
 
-    // Case 1: Non-empty query → containers[0] has assets[] (tab view)
-    // Case 2: Empty query    → containers[2] has containers[] (popular searches)
-    val items: List<SonyContainer> = run {
-        // Try tab structure first (non-empty search)
-        val firstTab = containers.firstOrNull()
-        val tabItems = firstTab?.containers
-        if (!tabItems.isNullOrEmpty()) return@run tabItems
+    val allTab = data.resultObj?.containers
+        ?.firstOrNull()
+        ?.containers
+        ?.firstOrNull { it.tab == "All" || it.tabKey == "All" }
+        ?: data.resultObj?.containers?.firstOrNull()?.containers?.firstOrNull()
 
-        // Fallback: popular search — find the "Popular Searches" container
-        val popularContainer = containers.find { 
-            it.layout == "popular_search" || it.title == "Popular Searches" 
-        }
-        popularContainer?.containers ?: emptyList()
-    }
+    val items = allTab?.assets ?: return results
 
     items.forEach { asset ->
-        val id    = asset.idStr() ?: return@forEach
-        val meta  = asset.metadata ?: return@forEach
-        val title = meta.title ?: return@forEach
-        val emf   = meta.emfAttributes
+        val title = asset.title ?: return@forEach
+        val emf   = asset.metadata?.emfAttributes
         val thumb = emf?.portraitThumb ?: emf?.thumbnail ?: emf?.landscapeThumb
 
-        val objType = meta.objectSubtype ?: meta.objectType ?: meta.contentSubtype
-
-        when {objType == "MOVIE_BUNDLE" || (objType == "BUNDLE" && meta.objectSubtype == "MOVIES") -> {
-                results.add(newMovieSearchResponse(title, "MOVIE::$id", TvType.Movie) {
+        // objectSubtype and contentCategory are TOP-LEVEL on the asset
+        when (asset.objectSubtype) {
+            "MOVIE" -> {
+                // Use contentId as the video ID, GGID as the bundle ID
+                val vid = asset.contentId?.toString() ?: return@forEach
+                results.add(newMovieSearchResponse(title, "MOVIE::$vid", TvType.Movie) {
                     this.posterUrl = thumb
                 })
             }
-            // Shows: GROUP_OF_BUNDLES shows OR EPISODIC_SHOW bundles
-            objType == "SHOW" || 
-            objType == "EPISODIC_SHOW" || 
-            meta.objectType == "GROUP_OF_BUNDLES" -> {
-                results.add(newTvSeriesSearchResponse(title, "SHOW::$id", TvType.TvSeries) {
+            "SHOW", "GROUP_OF_BUNDLES", "EPISODIC_SHOW" -> {
+                val sid = asset.contentId?.toString() ?: return@forEach
+                results.add(newTvSeriesSearchResponse(title, "SHOW::$sid", TvType.TvSeries) {
                     this.posterUrl = thumb
                 })
             }
-            // BUNDLE type — check category to distinguish movie vs show
-            objType == "BUNDLE" -> {
-                if (meta.objectSubtype == "TV_SHOW") {
-                    results.add(newTvSeriesSearchResponse(title, "SHOW::$id", TvType.TvSeries) {
-                        this.posterUrl = thumb
-                    })
-                } else {
-                    results.add(newMovieSearchResponse(title, "MOVIE::$id", TvType.Movie) {
-                        this.posterUrl = thumb
-                    })
-                }
+            "MOVIE_BUNDLE" -> {
+                // Standalone bundle acting as a movie
+                val sid = asset.contentId?.toString() ?: return@forEach
+                results.add(newMovieSearchResponse(title, "MOVIE::$sid", TvType.Movie) {
+                    this.posterUrl = thumb
+                })
             }
+            // Skip TRAILER, live channels, etc.
         }
     }
 
