@@ -60,7 +60,6 @@ data class SonyMetadata(
     @JsonProperty("externalId") val externalId: String? = null,
     @JsonProperty("label") val label: String? = null,
     @JsonProperty("id") val id: String? = null,
-    @JsonProperty("contentId") val contentId: String? = null,
     @JsonProperty("poster") val poster: String? = null,
     @JsonProperty("emfAttributes") val emfAttributes: SonyEmfAttributes? = null,
     @JsonProperty("contentId") val contentId: Long? = null,
