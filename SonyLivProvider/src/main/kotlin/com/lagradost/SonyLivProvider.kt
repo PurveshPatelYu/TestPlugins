@@ -121,6 +121,8 @@ data class SonyResultObj(
     @JsonProperty("channelPartnerID") val channelPartnerID: String? = null,
     @JsonProperty("dai_asset_key") val daiAssetKey: String? = null,
     @JsonProperty("subtitle") val subtitle: List<SonySubtitle>? = null,
+    @JsonProperty("LA_Details") val laDetails: SonyLaDetails? = null,
+    @JsonProperty("LA_ID")      val laId: String? = null,
 )
 
 data class SonyResponse(
@@ -147,12 +149,7 @@ data class SonyLaDetails(
     @JsonProperty("isDummy") val isDummy: Boolean? = null,
 )
 
-// Update SonyResultObj — add LA_Details field:
-data class SonyResultObj(
-    // ... existing fields ...
-    @JsonProperty("LA_Details") val laDetails: SonyLaDetails? = null,
-    @JsonProperty("LA_ID")      val laId: String? = null,
-)
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 class SonyLivProvider : MainAPI() {
@@ -332,8 +329,9 @@ class SonyLivProvider : MainAPI() {
 
 override suspend fun search(query: String): List<SearchResponse> {
     ensureInit()
+    val encoded = query.replace(" ", "+")
     val url = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/SEARCH" +
-        "?query=${query.encodeURL()}&from=0&to=20&tabs=1&kids_safe=false"
+        "?query=$encoded&from=0&to=20&tabs=1&kids_safe=false"
     val resp = app.get(url, headers = buildHeaders())
     val data = parseJson<SonyResponse>(resp.text)
 
@@ -649,7 +647,7 @@ private suspend fun loadMovie(sid: String): LoadResponse? {
     ) {
         this.posterUrl   = thumb
         this.plot        = meta.longDescription
-        this.year        = meta.year?.toIntOrNull()
+        this.year        = meta.year
     }
 }
 
@@ -662,9 +660,9 @@ override suspend fun loadLinks(
     callback: (ExtractorLink) -> Unit
 ): Boolean {
     ensureInit()
-    val clean = data.clean()
-    val parts = clean.split("::")
-    val vid   = parts.getOrElse(1) { clean }
+    val clean  = data.clean()
+    val parts  = clean.split("::")
+    val vid    = parts.getOrElse(1) { clean }
     val isLive = clean.contains("LIVE", ignoreCase = true)
 
     val result    = if (isLive) getLiveResult(vid) else getVodResult(vid)
@@ -683,23 +681,39 @@ override suspend fun loadLinks(
         else                       -> ExtractorLinkType.M3U8
     }
 
-    // Get Widevine license URL if stream is encrypted
     val licenseUrl = result.laDetails?.laURL
+    val isEncrypted = result.isEncrypted == true && licenseUrl != null
 
-    callback.invoke(
-        newExtractorLink(source = name, name = name, url = streamUrl) {
-            this.referer = "$mainUrl/"
-            this.headers = buildHeaders()
-            this.type    = type
-            if (licenseUrl != null) {
-                this.drmConfig = DrmConfig(
-                    KeySystem.WIDEVINE,
-                    licenseUrl,
-                    mapOf("Content-Type" to "application/octet-stream")
-                )
+    if (isEncrypted) {
+        callback.invoke(
+            newDrmExtractorLink(
+                source = name,
+                name   = name,
+                url    = streamUrl,
+                type   = type,
+                uuid   = WIDEVINE_UUID,
+            ) {
+                this.referer    = "$mainUrl/"
+                this.headers    = buildHeaders()
+                this.quality    = Qualities.Unknown.value
+                this.licenseUrl = licenseUrl
             }
-        }
-    )
+        )
+    } else {
+        callback.invoke(
+            newExtractorLink(
+                source = name,
+                name   = name,
+                url    = streamUrl,
+                type   = type,
+            ) {
+                this.referer  = "$mainUrl/"
+                this.headers  = buildHeaders()
+                this.quality  = Qualities.Unknown.value
+            }
+        )
+    }
+
     return true
 }
 
