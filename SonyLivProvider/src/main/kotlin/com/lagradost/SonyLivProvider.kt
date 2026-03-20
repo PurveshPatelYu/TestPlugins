@@ -258,21 +258,22 @@ class SonyLivProvider : MainAPI() {
         val items = tray?.assets?.containers?: return emptyList()
 
         items.forEach { item ->
+            val meta   = item.metadata ?: return@forEach
             val stype  = meta.objectSubtype ?: meta.contentSubtype ?: ""
             if (stype=="LAUNCHER"){
                 val emeta = item.editorialMetadata ?: return@forEach
                 val ameta   = item.assetMetadata ?: return@forEach
                 val title  = ameta.title?.takeIf { it.isNotBlank() } ?: return@forEach
-                val mid    = meta.contentId ?: return@forEach
+                val mid    = ameta.contentId ?: return@forEach
                 val thumb  = emeta.poster
                 results.add(
-                    newMovieSearchResponse(title, "MOVIE::$sid", TvType.Movie) {
+                    newMovieSearchResponse(title, "MOVIE::$mid", TvType.Movie) {
                         this.posterUrl = thumb
                     }
                 )
                 return@forEach
             }
-            val meta   = item.metadata ?: return@forEach
+
             val title  = meta.title?.takeIf { it.isNotBlank() } ?: return@forEach
             val sid    = item.idStr() ?: return@forEach
             val thumb  = item.bestThumb()
