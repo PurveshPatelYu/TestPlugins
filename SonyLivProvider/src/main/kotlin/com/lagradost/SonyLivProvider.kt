@@ -318,15 +318,7 @@ class SonyLivProvider : MainAPI() {
     // Shows use PAGE-V2/{trayId}, movies use EXTCOLLECTION/{itemId}
     val parts = trayId.split("_")
     
-    val pageUrl = if (parts.size == 2 && parts[0] == "1111") {
-        // EXTCOLLECTION tray (movies)
-        val collectionId = parts[1]
-        "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/EXTCOLLECTION/$collectionId" +
-            "?layout=portrait_layout&id=$trayId&SSR=false&recoPath=false&isFromDetail=false&isPageV2=true"
-    } else {
-        // PAGE-V2 tray (shows)
-        "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/PAGE-V2/$trayId?kids_safe=false&from=0&to=30"
-    }
+    val pageUrl = "$apiBase/AGL/4.8/R/ENG/WEB/IN/MH/PAGE-V2/$trayId?kids_safe=false&from=0&to=30"
 
     val pageResp = app.get(pageUrl, headers = buildHeaders())
     val pageData = parseJson<SonyResponse>(pageResp.text)
@@ -388,8 +380,9 @@ class SonyLivProvider : MainAPI() {
 
 override suspend fun search(query: String): List<SearchResponse> {
     ensureInit()
+    val encoded = query.replace(" ", "+")
     val url = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/SEARCH" +
-        "?query=${query.encodeURL()}&from=0&to=20&tabs=1&kids_safe=false"
+        "?query=query.encoded&from=0&to=20&tabs=1&kids_safe=false"
     val resp = app.get(url, headers = buildHeaders())
     val data = parseJson<SonySearchResponse>(resp.text)
 
