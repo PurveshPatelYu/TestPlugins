@@ -63,7 +63,6 @@ data class SonyMetadata(
     @JsonProperty("poster") val poster: String? = null,
     @JsonProperty("emfAttributes") val emfAttributes: SonyEmfAttributes? = null,
     @JsonProperty("contentId") val contentId: Long? = null,
-     @JsonProperty("contentCategory") val contentCategory: Long? = null,
     @JsonProperty("objectType") val objectType: String? = null,
     @JsonProperty("contentType") val contentType: String? = null,
     @JsonProperty("season") val season: Int? = null,
@@ -365,7 +364,7 @@ override suspend fun search(query: String): List<SearchResponse> {
 
         val objType = meta.objectSubtype ?: meta.objectType ?: meta.contentSubtype
 
-        when {objType == "MOVIE_BUNDLE" || (objType == "BUNDLE" && meta.contentCategory == "MOVIES") -> {
+        when {objType == "MOVIE_BUNDLE" || (objType == "BUNDLE" && meta.objectSubtype == "MOVIES") -> {
                 results.add(newMovieSearchResponse(title, "MOVIE::$id", TvType.Movie) {
                     this.posterUrl = thumb
                 })
@@ -380,7 +379,7 @@ override suspend fun search(query: String): List<SearchResponse> {
             }
             // BUNDLE type — check category to distinguish movie vs show
             objType == "BUNDLE" -> {
-                if (meta.contentCategory == "TV_SHOW") {
+                if (meta.objectSubtype == "TV_SHOW") {
                     results.add(newTvSeriesSearchResponse(title, "SHOW::$id", TvType.TvSeries) {
                         this.posterUrl = thumb
                     })
