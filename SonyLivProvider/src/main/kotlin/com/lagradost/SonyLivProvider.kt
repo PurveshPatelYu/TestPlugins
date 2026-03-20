@@ -60,6 +60,8 @@ data class SonyMetadata(
     @JsonProperty("externalId") val externalId: String? = null,
     @JsonProperty("label") val label: String? = null,
     @JsonProperty("id") val id: String? = null,
+    @JsonProperty("contentId") val contentId: String? = null,
+    @JsonProperty("poster") val poster: String? = null,
     @JsonProperty("emfAttributes") val emfAttributes: SonyEmfAttributes? = null,
     @JsonProperty("contentId") val contentId: Long? = null,
     @JsonProperty("objectType") val objectType: String? = null,
@@ -93,6 +95,8 @@ data class SonyContainer(
     @JsonProperty("id") val id: Any? = null,  // API returns both String and Int IDs
     @JsonProperty("title") val title: String? = null,
     @JsonProperty("metadata") val metadata: SonyMetadata? = null,
+    @JsonProperty("assetMetadata") val assetMetadata: SonyMetadata? = null,
+    @JsonProperty("editorialMetadata") val editorialMetadata: SonyMetadata? = null,
     @JsonProperty("actions") val actions: List<SonyAction>? = null,
     @JsonProperty("assets") val assets: SonyAssets? = null,
     @JsonDeserialize(using = FlexibleContainerListDeserializer::class)
@@ -254,12 +258,25 @@ class SonyLivProvider : MainAPI() {
         val items = tray?.assets?.containers?: return emptyList()
 
         items.forEach { item ->
+            val stype  = meta.objectSubtype ?: meta.contentSubtype ?: ""
+            if (stype=="LAUNCHER"){
+                val emeta = item.editorialMetadata ?: return@forEach
+                val ameta   = item.assetMetadata ?: return@forEach
+                val title  = ameta.title?.takeIf { it.isNotBlank() } ?: return@forEach
+                val mid    = meta.contentId ?: return@forEach
+                val thumb  = emeta.poster
+                results.add(
+                    newMovieSearchResponse(title, "MOVIE::$sid", TvType.Movie) {
+                        this.posterUrl = thumb
+                    }
+                )
+                return@forEach
+            }
             val meta   = item.metadata ?: return@forEach
             val title  = meta.title?.takeIf { it.isNotBlank() } ?: return@forEach
             val sid    = item.idStr() ?: return@forEach
             val thumb  = item.bestThumb()
-            val stype  = meta.objectSubtype ?: meta.contentSubtype ?: ""
-
+            
             when (stype) {
                 "SHOW" -> results.add(
                     newTvSeriesSearchResponse(title, "SHOW::$sid", TvType.TvSeries) {
