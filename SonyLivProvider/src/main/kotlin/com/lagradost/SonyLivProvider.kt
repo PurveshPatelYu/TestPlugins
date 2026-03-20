@@ -381,7 +381,7 @@ class SonyLivProvider : MainAPI() {
 override suspend fun search(query: String): List<SearchResponse> {
     ensureInit()
     val url = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/SEARCH" +
-        "?query=${query.encodeURL()}&from=0&to=20&tabs=1&kids_safe=false"
+        "?query=$query&from=0&to=20&tabs=1&kids_safe=false"
     val resp = app.get(url, headers = buildHeaders())
     val data = parseJson<SonySearchResponse>(resp.text)
 
@@ -668,13 +668,13 @@ private suspend fun loadMovie(sid: String): LoadResponse? {
     val items = container?.containers ?: emptyList()
     items.forEach { item ->
         val meta    = item.metadata ?: return@forEach
-        val itemId  = item.contentId ?: return@forEach
+        val itemId  = meta.contentId ?: return@forEach
         if (meta.objectSubtype=="MOVIE"){
             return newMovieLoadResponse(
                 name    = meta.title ?: return null,
-                url     = "PLAY::$videoId",
+                url     = "PLAY::$itemId",
                 type    = TvType.Movie,
-                dataUrl = "PLAY::$videoId"
+                dataUrl = "PLAY::$itemId"
             )
         }
     }
