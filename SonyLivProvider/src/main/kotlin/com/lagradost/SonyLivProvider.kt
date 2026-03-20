@@ -766,11 +766,11 @@ private suspend fun getVodResult(vid: String): SonyResultObj? {
         )
     )
 
-    var url  = "$apiBase/AGL/3.0/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
+    var url  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
     var resp = app.post(url, headers = buildHeaders(), json = body)
     
     if (!resp.isSuccessful) {
-        url  = "$apiBase/AGL/3.0/SR/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid"
+        url  = "$apiBase/AGL/4.8/SR/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid"
         resp = app.post(url, headers = buildHeaders(), json = body)
     }
     if (!resp.isSuccessful) return null
