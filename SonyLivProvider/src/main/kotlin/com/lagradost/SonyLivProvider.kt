@@ -291,13 +291,11 @@ class SonyLivProvider : MainAPI() {
     override val mainPage = mainPageOf(
         // TV Shows sub-trays  (page id 7738)
         "31155_24783" to "Latest Episodes",
-        "35211_7935" to "New on Liv",
         "38048_7123"  to "SET Shows",
         "38048_8417"  to "Sony SAB Shows",
         "38048_7131"  to "SET Classics",
         // Movies sub-trays  (page id 7745)
-        "47570_22200"  to "Movies",
-        "47570_22204" to "Liv Movies",
+        "1111_9013870"  to "Movies",
         // Sports
         "39379_24064"  to "Sports",
     )
@@ -382,9 +380,8 @@ class SonyLivProvider : MainAPI() {
 
 override suspend fun search(query: String): List<SearchResponse> {
     ensureInit()
-    val encoded = query.replace(" ", "+")
     val url = "$apiBase3/AGL/4.8/A/ENG/WEB/IN/MH/TRAY/SEARCH" +
-        "?query=query.encoded&from=0&to=20&tabs=1&kids_safe=false"
+        "?query=${query.encodeURL()}&from=0&to=20&tabs=1&kids_safe=false"
     val resp = app.get(url, headers = buildHeaders())
     val data = parseJson<SonySearchResponse>(resp.text)
 
@@ -660,7 +657,7 @@ override suspend fun search(query: String): List<SearchResponse> {
     }
 
 private suspend fun loadMovie(sid: String): LoadResponse? {
-    ensureInit()
+    
     val url = "$apiBase3/AGL/2.6/A/ENG/WEB/IN/MH/CONTENT/DETAIL/BUNDLE/$sid"
     val resp = app.get(url, headers = buildHeaders())
     val data = parseJson<SonyResponse>(resp.text)
@@ -668,9 +665,19 @@ private suspend fun loadMovie(sid: String): LoadResponse? {
     val container = data.resultObj?.containers?.firstOrNull() ?: return null
     val meta = container.metadata ?: return null
     val emf  = meta.emfAttributes
-
-    // The actual playable video ID — from containers inside or from the bundle's own ID
-    // In BUNDLE detail, the first container IS the video item with the real contentId
+    val items = container?.containers ?: emptyList()
+    items.forEach { item ->
+        val meta    = item.metadata ?: return@forEach
+        val itemId  = item.contentId ?: return@forEach
+        if (meta.objectSubtype=="MOVIE"){
+            return newMovieLoadResponse(
+                name    = meta.title ?: return null,
+                url     = "PLAY::$videoId",
+                type    = TvType.Movie,
+                dataUrl = "PLAY::$videoId"
+            )
+        }
+    }
     val videoId = container.idStr() ?: sid  // fallback to bundle id itself
 
     val thumb = emf?.let { it.portraitThumb ?: it.poster ?: it.landscapeThumb ?: it.thumbnail }
@@ -786,23 +793,4 @@ private suspend fun getLiveResult(vid: String): SonyResultObj? {
     )
     return parseJson<SonyResponse>(resp.text).resultObj
 }
-
-    private suspend fun getVodUrl(vid: String): String? {
-        var url  = "$apiBase/AGL/4.8/R/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid/freepreview"
-        var resp = app.get(url, headers = buildHeaders())
-        if (!resp.isSuccessful) {
-            url  = "$apiBase/AGL/4.8/SR/ENG/WEB/IN/$stateCode/CONTENT/VIDEOURL/VOD/$vid"
-            resp = app.get(url, headers = buildHeaders())
-        }
-        if (!resp.isSuccessful) return null
-        return parseJson<SonyResponse>(resp.text).resultObj?.videoURL
-    }
-
-    private suspend fun getLiveUrl(vid: String): String? {
-        val resp = app.get(
-            "$apiBase/AGL/3.2/R/ENG/WEB/IN/ALL/CONTENT/VIDEOURL/VOD/$vid/freepreview?contactId=MSMIND",
-            headers = buildHeaders()
-        )
-        return parseJson<SonyResponse>(resp.text).resultObj?.videoURL
-    }
 }
