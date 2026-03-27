@@ -516,7 +516,7 @@ override suspend fun search(query: String): List<SearchResponse> {
                     val tkmocjsonurl="https://raw.githubusercontent.com/PurveshPatelYu/TestPlugins/refs/heads/master/SonyLivProvider/$bundleId.json"
                     if (sid=="1700000084" && urlExists(tkmocjsonurl)){
                         val rawJson = app.get(tkmocjsonurl).text
-                        val data = parseJson<tkmocjson>(rawJson)
+                        val data = parseJson<List<tkmocjson>>(rawJson)
                         data.forEach { item ->
                             val id = item.id
                             episodes.add(newEpisode("PLAY::$id") {
