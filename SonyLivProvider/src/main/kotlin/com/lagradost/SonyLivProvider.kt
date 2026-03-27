@@ -111,7 +111,15 @@ data class SonySearchResponse(
     @JsonProperty("resultCode") val resultCode: String? = null,
     @JsonProperty("resultObj")  val resultObj: SonySearchResultObj? = null,
 )
-
+data class tkmocjson(
+  @JsonProperty("id"   ) var id   : Int?    = null,
+  @JsonProperty("name" ) var name : String? = null,
+  @JsonProperty("ep"   ) var ep   : Int?    = null,
+  @JsonProperty("sn"   ) var sn   : Int?    = null,
+  @JsonProperty("url"  ) var url  : String? = null,
+  @JsonProperty("desc" ) var desc : String? = null,
+  @JsonProperty("time" ) var time : Int?    = null
+)
 data class SonySearchResultObj(
     @JsonProperty("total")      val total: Int? = null,
     @JsonProperty("containers") val containers: List<SonySearchOuterContainer>? = null,
@@ -508,15 +516,16 @@ override suspend fun search(query: String): List<SearchResponse> {
                     val tkmocjsonurl="https://raw.githubusercontent.com/PurveshPatelYu/TestPlugins/refs/heads/master/SonyLivProvider/$bundleId.json"
                     if (sid=="1700000084" && urlExists(tkmocjsonurl)){
                         val rawJson = app.get(tkmocjsonurl).text
-                        val data = parseJson<List<Map<String, Any>>>(rawJson)
+                        val data = parseJson<tkmocjson>(rawJson)
                         data.forEach { item ->
-                            episodes.add(newEpisode("PLAY::${item["id"]}") {
-                                this.name        = item["name"] as? String
-                                this.episode     = (item["ep"] as? Double)?.toInt()
-                                this.season      = (item["sn"] as? Double)?.toInt()
-                                this.posterUrl   = item["url"] as? String
-                                this.description = item["desc"] as? String
-                                this.runTime     = (item["time"] as? Double)?.toInt()
+                            val id = item.id
+                            episodes.add(newEpisode("PLAY::$id") {
+                                this.name        = item.name
+                                this.episode     = item.ep
+                                this.season      = item.sn
+                                this.posterUrl   = item.url
+                                this.description = item.desc
+                                this.runTime     = item.time
                             })
                         }
                         return@forEach
